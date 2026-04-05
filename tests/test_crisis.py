@@ -16,6 +16,12 @@ class TestNormalizeText:
     def test_empty_string(self):
         assert normalize_text("") == ""
 
+    def test_strips_zero_width_characters(self):
+        # Zero-width chars should be stripped to prevent keyword bypass
+        assert normalize_text("sebe\u200Bvrazda") == "sebevrazda"
+        assert normalize_text("chci\u200D zemrit") == "chci zemrit"
+        assert normalize_text("\ufefftest") == "test"
+
 
 class TestCriticalDetection:
     def test_chci_zemrit_with_diacritics(self):
@@ -53,6 +59,11 @@ class TestCriticalDetection:
     def test_matched_keywords_populated(self):
         result = detect_crisis("Chci zemřít")
         assert len(result.matched_keywords) > 0
+
+    def test_zero_width_bypass_blocked(self):
+        """Zero-width characters must not bypass crisis detection."""
+        result = detect_crisis("sebe\u200Bvražda")
+        assert result.level == CrisisLevel.CRITICAL
 
 
 class TestHighDetection:
