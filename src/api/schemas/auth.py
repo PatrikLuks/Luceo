@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 class RegisterRequest(BaseModel):
     email: EmailStr | None = None  # Optional — anonymity is a feature
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=128)
     display_name: str | None = Field(None, max_length=100)
     gdpr_consent: bool  # Must be True
 

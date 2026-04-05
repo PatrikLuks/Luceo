@@ -35,6 +35,11 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 GDPR_CONSENT_VERSION = "1.0"
 
 
+def _get_client_ip(request: Request) -> str | None:
+    """Safely extract client IP — request.client can be None behind some proxies."""
+    return request.client.host if request.client else None
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def register(
@@ -69,7 +74,7 @@ async def register(
     refresh = await create_refresh_token(user.id, db)
 
     await log_audit_event(
-        db, "user_register", user_id=user.id, ip_address=request.client.host
+        db, "user_register", user_id=user.id, ip_address=_get_client_ip(request)
     )
     await db.commit()
 
@@ -86,7 +91,9 @@ async def login(
     )
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(req.password, user.password_hash):
+    # Constant-time: always run verify_password to prevent timing-based email enumeration
+    _dummy_hash = "$2b$12$LJ3m4ys3Lg3DEQFIY3Bqxe1111111111111111111111111111111"
+    if not verify_password(req.password, user.password_hash if user else _dummy_hash) or not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials."
         )
@@ -95,7 +102,7 @@ async def login(
     refresh = await create_refresh_token(user.id, db)
 
     await log_audit_event(
-        db, "user_login", user_id=user.id, ip_address=request.client.host
+        db, "user_login", user_id=user.id, ip_address=_get_client_ip(request)
     )
     await db.commit()
 
@@ -131,7 +138,7 @@ async def delete_me(
 
     # Log the deletion event (will be committed with PII wipe below)
     await log_audit_event(
-        db, "gdpr_deletion", user_id=user.id, ip_address=request.client.host
+        db, "gdpr_deletion", user_id=user.id, ip_address=_get_client_ip(request)
     )
 
     # Wipe user PII

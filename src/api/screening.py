@@ -52,7 +52,7 @@ async def submit_audit(
         db, "audit_completed",
         user_id=user.id,
         details={"total_score": result.total_score, "risk_level": result.risk_level},
-        ip_address=request.client.host,
+        ip_address=request.client.host if request.client else None,
     )
     await db.commit()
 
@@ -73,6 +73,7 @@ async def get_screening_results(
         select(ScreeningResult)
         .where(ScreeningResult.user_id == user.id)
         .order_by(ScreeningResult.completed_at.desc())
+        .limit(100)
     )
     screenings = result.scalars().all()
     return [

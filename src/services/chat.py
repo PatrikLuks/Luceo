@@ -75,7 +75,8 @@ async def process_message(
             "disclaimer": None,
         }
 
-    # 3. Load conversation history
+    # 3. Load conversation history (flush pending user_msg first to include it)
+    await db.flush()
     result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
@@ -92,18 +93,16 @@ async def process_message(
             decrypted = "[encrypted message]"
         messages.append({"role": msg.role, "content": decrypted})
 
-    # Add current message
-    messages.append({"role": "user", "content": content})
-
     # 4. RAG: retrieve relevant clinical docs
     docs = await retrieve_context(content, db)
     rag_context = format_context(docs)
 
-    # 5. Build system prompt
+    # 5. Build system prompt (use Template to avoid crashes on { } in RAG content)
     user_context = ""  # TODO: inject sobriety streak, mood data
-    system_prompt = LUCEO_SYSTEM_PROMPT.format(
-        rag_context=rag_context,
-        user_context=user_context,
+    system_prompt = LUCEO_SYSTEM_PROMPT.replace(
+        "{rag_context}", rag_context
+    ).replace(
+        "{user_context}", user_context
     )
 
     # 6. Call Claude API

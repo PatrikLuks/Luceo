@@ -24,17 +24,11 @@ CZECH_CRISIS_CONTACTS: list[CrisisContact] = [
         url="https://www.linkabezpeci.cz",
     ),
     CrisisContact(
-        name="Krizová pomoc",
+        name="Linka první psychické pomoci",
         phone="116 123",
-        description="Linka první psychické pomoci",
+        description="Telefonická krizová intervence a první psychická pomoc",
         available="24/7",
         url="https://www.csspraha.cz",
-    ),
-    CrisisContact(
-        name="Linka důvěry",
-        phone="116 123",
-        description="Telefonická krizová intervence",
-        available="24/7",
     ),
     CrisisContact(
         name="Národní linka pro odvykání",

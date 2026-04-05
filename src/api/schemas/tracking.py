@@ -8,7 +8,7 @@ class CheckinRequest(BaseModel):
     is_sober: bool
     mood: int | None = Field(None, ge=1, le=5)
     energy_level: int | None = Field(None, ge=1, le=5)
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=2000)
 
 
 class CheckinResponse(BaseModel):
@@ -21,8 +21,8 @@ class CheckinResponse(BaseModel):
 class CravingRequest(BaseModel):
     intensity: int = Field(ge=1, le=10)
     trigger_category: str = Field(pattern="^(stress|social|emotional|habitual|environmental|other)$")
-    trigger_notes: str | None = None
-    coping_strategy_used: str | None = None
+    trigger_notes: str | None = Field(None, max_length=2000)
+    coping_strategy_used: str | None = Field(None, max_length=200)
     outcome: str | None = Field(None, pattern="^(resisted|gave_in)$")
 
 

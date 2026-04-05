@@ -7,6 +7,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | File | Purpose |
 |---|---|
 | `CLAUDE.md` | Instructions for AI assistants working on this project |
+| `README.md` | GitHub landing page (English) |
 | `pyproject.toml` | Project metadata, dependencies, tool config |
 | `.env.example` | Environment variable template |
 | `.gitignore` | Git ignore patterns |
@@ -49,7 +50,8 @@ Complete listing of every file and its purpose. Use this as the entry point when
 
 | File | Purpose |
 |---|---|
-| `REPORT_2026-04-05.md` | Session report (2026-04-05) |
+| `REPORT_2026-04-05.md` | Session 1 report (2026-04-05) — refresh tokens, rate limiting, Alembic |
+| `REPORT_2026-04-05_s3.md` | Session 3 report (2026-04-05) — security audit, test expansion, README |
 
 ## `alembic/` — Database Migrations
 
@@ -132,9 +134,11 @@ FastAPI app with CORS middleware, security headers middleware, request logging m
 |---|---|
 | `conftest.py` | Shared fixtures: async SQLite session, mock Anthropic client, all 9 model imports |
 | `test_crisis.py` | 32 tests: normalize_text, zero-width bypass, CRITICAL/HIGH/MEDIUM/NONE detection, crisis responses |
-| `test_guardrails.py` | 7 tests: diagnostic patterns, medication patterns, safe fallback |
+| `test_guardrails.py` | 15 tests: diagnostic patterns, medication patterns, diacritics normalization, feminine forms, safe fallback self-check |
 | `test_screening.py` | 13 tests: AUDIT scoring boundary tests, Q9/Q10 validation |
 | `test_auth.py` | 7 tests: refresh token create, verify, expire, revoke, rotation, hash |
 | `test_rate_limit.py` | 3 tests: JWT key extraction, IP fallback, invalid JWT |
-| `test_middleware.py` | 5 tests: CSP, HSTS prod/dev, Permissions-Policy, basic headers |
+| `test_middleware.py` | 7 tests: CSP, HSTS prod/dev, Permissions-Policy, X-XSS-Protection, Referrer-Policy, basic headers |
+| `test_security.py` | 13 tests: AES-256-GCM round-trip, corrupt data, JWT create/decode, password hashing, production config validation |
+| `test_tracking_service.py` | 10 tests: sobriety streak (consecutive, gaps, breaks), tracking summary (empty, with data, top trigger) |
 | `__init__.py` | Package marker |

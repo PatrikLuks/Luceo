@@ -43,3 +43,46 @@ class TestGuardrails:
     def test_safe_fallback_exists(self):
         assert len(SAFE_FALLBACK) > 0
         assert "lékaře" in SAFE_FALLBACK
+
+    # --- New tests: normalization bypass prevention ---
+
+    def test_safe_fallback_passes_guardrails(self):
+        """The safe fallback itself must not trigger any guardrail."""
+        is_safe, reason = check_response_guardrails(SAFE_FALLBACK)
+        assert is_safe is True, f"SAFE_FALLBACK triggers guardrail: {reason}"
+
+    def test_detects_without_diacritics(self):
+        """Guardrails must catch patterns even without Czech diacritics."""
+        is_safe, _ = check_response_guardrails("Vase diagnoza je porucha zavislosti.")
+        assert is_safe is False
+
+    def test_detects_jsi_zavisla_feminine(self):
+        """Feminine form must also be caught."""
+        is_safe, _ = check_response_guardrails("Myslím, že jsi závislá na alkoholu.")
+        assert is_safe is False
+
+    def test_detects_jsi_alkoholicka_feminine(self):
+        """Feminine alkoholicka must also be caught."""
+        is_safe, _ = check_response_guardrails("Jsi alkoholička a potřebuješ pomoc.")
+        assert is_safe is False
+
+    def test_detects_baclofen(self):
+        """New medication baclofen must be caught."""
+        is_safe, _ = check_response_guardrails("Zkus baclofen na snížení chutí.")
+        assert is_safe is False
+
+    def test_detects_english_dosage(self):
+        """English dosage patterns must be caught."""
+        is_safe, _ = check_response_guardrails("Take 50 mg daily with food.")
+        assert is_safe is False
+
+    def test_case_insensitive(self):
+        """Patterns must match regardless of case."""
+        is_safe, _ = check_response_guardrails("NALTREXON je lék na závislost.")
+        assert is_safe is False
+
+    def test_reason_does_not_leak_pattern(self):
+        """Reason string must not expose internal regex patterns."""
+        _, reason = check_response_guardrails("Doporučuji naltrexon.")
+        assert reason is not None
+        assert "\\" not in reason  # No regex syntax in reason

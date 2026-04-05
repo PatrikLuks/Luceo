@@ -25,29 +25,42 @@ async def export_my_data(
     checkins_result = await db.execute(
         select(SobrietyCheckin).where(SobrietyCheckin.user_id == user.id)
     )
-    checkins = [
-        {
+    checkins = []
+    for c in checkins_result.scalars().all():
+        notes = None
+        if c.notes_encrypted:
+            try:
+                notes = decrypt_field(c.notes_encrypted)
+            except Exception:
+                notes = "[decryption_error]"
+        checkins.append({
             "date": str(c.date),
             "is_sober": c.is_sober,
             "mood": c.mood,
             "energy_level": c.energy_level,
-        }
-        for c in checkins_result.scalars().all()
-    ]
+            "notes": notes,
+        })
 
     # Cravings
     cravings_result = await db.execute(
         select(CravingEvent).where(CravingEvent.user_id == user.id)
     )
-    cravings = [
-        {
+    cravings = []
+    for c in cravings_result.scalars().all():
+        trigger_notes = None
+        if c.trigger_notes_encrypted:
+            try:
+                trigger_notes = decrypt_field(c.trigger_notes_encrypted)
+            except Exception:
+                trigger_notes = "[decryption_error]"
+        cravings.append({
             "intensity": c.intensity,
             "trigger_category": c.trigger_category,
+            "trigger_notes": trigger_notes,
+            "coping_strategy_used": c.coping_strategy_used,
             "outcome": c.outcome,
             "created_at": c.created_at.isoformat(),
-        }
-        for c in cravings_result.scalars().all()
-    ]
+        })
 
     # Screenings
     screenings_result = await db.execute(

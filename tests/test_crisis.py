@@ -54,7 +54,7 @@ class TestCriticalDetection:
 
     def test_crisis_contacts_included(self):
         result = detect_crisis("Chci zemřít")
-        assert len(result.crisis_contacts) > 0
+        assert len(result.crisis_contacts) == 6  # All contacts (after dedup fix)
 
     def test_matched_keywords_populated(self):
         result = detect_crisis("Chci zemřít")

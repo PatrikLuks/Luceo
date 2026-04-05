@@ -5,20 +5,35 @@ in Luceo's output, even if the system prompt was bypassed.
 """
 
 import re
+import unicodedata
 
+# --- Text normalization (mirrors crisis.py approach) ---
+
+
+def _normalize_text(text: str) -> str:
+    """Strip diacritics and normalize whitespace for pattern matching."""
+    # NFKD decomposes characters (e.g., é → e + combining accent)
+    nfkd = unicodedata.normalize("NFKD", text)
+    # Strip combining marks (accents)
+    stripped = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+    return stripped.lower()
+
+
+# Patterns are written WITHOUT diacritics — normalization strips them
 _DIAGNOSTIC_PATTERNS = [
     r"\bF1[0-9]\.[0-9]\b",  # ICD-10 codes
-    r"\b(diagnostikuji|vaše diagnóza|trpíte)\b",
-    r"\bmáš\s+(diagnózu|poruchu|nemoc)\b",
-    r"\bjsi\s+alkoholik\b",
-    r"\bjsi\s+závislý\b",
+    r"\b(diagnostikuji|vase diagnoza|trpite)\b",
+    r"\bmas\s+(diagnozu|poruchu|nemoc)\b",
+    r"\bjsi\s+alkoholi[ck]\w*\b",  # alkoholik, alkoholicka, alkoholikem...
+    r"\bjsi\s+zavisl[yae]\w*\b",  # zavisly, zavisla, zavisle, zavislym...
 ]
 
 _MEDICATION_PATTERNS = [
-    r"\b(naltrexon|acampros[aá]t|disulfiram|antabus|campral)\b",
+    r"\b(naltrexon|acamprosat|disulfiram|antabus|campral)\b",
+    r"\b(baclofen|baklofen|gabapentin|topiramat|nalmefen|nalmefene)\b",
     r"\b(diazepam|lorazepam|alprazolam|xanax|lexaurin)\b",
     r"\b(sertralin|fluoxetin|escitalopram|citalopram|paroxetin)\b",
-    r"\b(\d+\s*mg\s*(denně|ráno|večer|2x|3x))\b",
+    r"\b(\d+\s*mg\s*(denne|rano|vecer|2x|3x|daily|twice|once))\b",
 ]
 
 _COMPILED_DIAGNOSTIC = [re.compile(p, re.IGNORECASE | re.UNICODE) for p in _DIAGNOSTIC_PATTERNS]
@@ -37,12 +52,14 @@ def check_response_guardrails(response: str) -> tuple[bool, str | None]:
     Returns (is_safe, reason). If not safe, caller should replace
     the offending response with SAFE_FALLBACK.
     """
+    normalized = _normalize_text(response)
+
     for pattern in _COMPILED_DIAGNOSTIC:
-        if pattern.search(response):
-            return False, f"Diagnostic language detected: {pattern.pattern}"
+        if pattern.search(normalized):
+            return False, "Diagnostic language detected"
 
     for pattern in _COMPILED_MEDICATION:
-        if pattern.search(response):
-            return False, f"Medication recommendation detected: {pattern.pattern}"
+        if pattern.search(normalized):
+            return False, "Medication recommendation detected"
 
     return True, None

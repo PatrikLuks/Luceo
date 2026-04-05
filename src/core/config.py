@@ -58,11 +58,14 @@ def validate_production_settings() -> None:
     if settings.app_env == "development":
         return
     errors = []
-    if settings.jwt_secret.startswith("changeme"):
-        errors.append("jwt_secret must be set to a real secret in production")
-    if settings.encryption_key.startswith("changeme"):
+    if settings.jwt_secret.startswith("changeme") or len(settings.jwt_secret) < 32:
+        errors.append("jwt_secret must be a real secret (min 32 chars) in production")
+    enc = settings.encryption_key
+    if enc.startswith("changeme") or len(enc) < 64:
         errors.append("encryption_key must be a 64-char hex string in production")
     if not settings.anthropic_api_key:
         errors.append("anthropic_api_key must be set in production")
+    if settings.postgres_password.startswith("changeme"):
+        errors.append("postgres_password must be set to a real password in production")
     if errors:
         raise RuntimeError(f"Production configuration errors: {'; '.join(errors)}")

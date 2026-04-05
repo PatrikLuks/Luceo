@@ -105,10 +105,18 @@ def encrypt_field(plaintext: str) -> str:
 
 
 def decrypt_field(encrypted_hex: str) -> str:
-    """Decrypt a hex-encoded AES-256-GCM field."""
-    key = _get_aes_key()
-    aesgcm = AESGCM(key)
-    raw = bytes.fromhex(encrypted_hex)
-    nonce = raw[:12]
-    ciphertext = raw[12:]
-    return aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
+    """Decrypt a hex-encoded AES-256-GCM field.
+
+    Raises ValueError on corrupt/invalid data.
+    """
+    try:
+        key = _get_aes_key()
+        aesgcm = AESGCM(key)
+        raw = bytes.fromhex(encrypted_hex)
+        if len(raw) < 13:  # 12-byte nonce + at least 1 byte ciphertext
+            raise ValueError("Encrypted data too short")
+        nonce = raw[:12]
+        ciphertext = raw[12:]
+        return aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
+    except (ValueError, Exception) as e:
+        raise ValueError(f"Decryption failed: {e}") from e

@@ -51,3 +51,14 @@ class TestSecurityHeaders:
         response = client.get("/")
         assert response.headers["X-Content-Type-Options"] == "nosniff"
         assert response.headers["X-Frame-Options"] == "DENY"
+
+    def test_xss_protection_disabled(self):
+        """X-XSS-Protection should be 0 (CSP handles XSS protection)."""
+        client = TestClient(_make_app())
+        response = client.get("/")
+        assert response.headers["X-XSS-Protection"] == "0"
+
+    def test_referrer_policy_present(self):
+        client = TestClient(_make_app())
+        response = client.get("/")
+        assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"

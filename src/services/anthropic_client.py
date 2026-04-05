@@ -41,8 +41,8 @@ async def generate_response(
         tokens = response.usage.input_tokens + response.usage.output_tokens
         return text, tokens
 
-    except anthropic.APIError as e:
-        logger.error("Anthropic API error: %s", e)
+    except Exception as e:
+        logger.error("Anthropic API error: %s: %s", type(e).__name__, e)
         return (
             "Omlouvám se, momentálně nemohu odpovědět. Zkus to prosím za chvíli. "
             "Pokud potřebuješ okamžitou pomoc, zavolej na 116 123.",

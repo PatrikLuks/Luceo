@@ -17,7 +17,7 @@ def _key_func(request: Request) -> str:
             user_id = payload.get("sub")
             if user_id:
                 return f"user:{user_id}"
-        except ValueError:
+        except Exception:
             pass
     return f"ip:{get_remote_address(request)}"
 
