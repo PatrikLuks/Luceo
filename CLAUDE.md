@@ -121,7 +121,7 @@ src/
 ## Stav implementace (Session 0 + audit)
 - **49 testů** — vše prochází (crisis detection, guardrails, AUDIT scoring)
 - **6 API routerů** — auth, chat, screening, tracking, crisis, admin
-- **23 endpointů** celkem
+- **19 endpointů** celkem (18 v routerech + /health)
 - **Bezpečnostní audit:** CORS restricted, GDPR erasure complete, ForeignKeys, LIKE injection fix, startup secret validation, zero-width char bypass fix in crisis detection
 - Alembic migrace: TODO
 - Frontend: TODO (React Native)
