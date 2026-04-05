@@ -3,13 +3,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from src.core.config import settings, validate_production_settings
-from src.core.database import engine
-from src.core.middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # Import all routers
 from src.api.router import all_routers
+from src.core.config import settings, validate_production_settings
+from src.core.database import engine
+from src.core.middleware import RequestLoggingMiddleware, SecurityHeadersMiddleware
+from src.core.rate_limit import limiter
 
 logger = logging.getLogger("luceo")
 
@@ -34,7 +37,7 @@ app = FastAPI(
 _cors_origins = (
     ["http://localhost:3000", "http://localhost:8081"]
     if settings.app_env == "development"
-    else [f"https://{origin}" for origin in settings.cors_allowed_origins.split(",") if origin]
+    else [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
 )
 
 app.add_middleware(
@@ -48,6 +51,11 @@ app.add_middleware(
 for router in all_routers:
     app.include_router(router)
 
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 

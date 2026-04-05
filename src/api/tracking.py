@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from src.api.schemas.tracking import (
 )
 from src.core.database import get_db
 from src.core.deps import get_current_user
+from src.core.rate_limit import limiter
 from src.core.security import encrypt_field
 from src.models.tracking import CravingEvent, SobrietyCheckin
 from src.models.user import User
@@ -22,8 +23,10 @@ router = APIRouter(prefix="/api/v1/tracking", tags=["tracking"])
 
 
 @router.post("/checkin", response_model=CheckinResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
 async def daily_checkin(
     body: CheckinRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -86,8 +89,10 @@ async def get_today_checkin(
 
 
 @router.post("/cravings", response_model=CravingResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("60/minute")
 async def log_craving(
     body: CravingRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

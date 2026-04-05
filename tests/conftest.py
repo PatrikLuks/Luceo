@@ -1,14 +1,22 @@
 """Shared test fixtures — async SQLite session, authenticated client, mocks."""
 
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from src.models.audit_log import AuditLog  # noqa: F401
 from src.models.base import Base
+from src.models.conversation import Conversation, Message  # noqa: F401
+from src.models.knowledge_base import KnowledgeDocument  # noqa: F401
+from src.models.refresh_token import RefreshToken  # noqa: F401
+from src.models.screening import ScreeningResult  # noqa: F401
+from src.models.tracking import CravingEvent, SobrietyCheckin  # noqa: F401
+
+# Import all models so Base.metadata is fully populated for SQLite test DB
+from src.models.user import User  # noqa: F401
 
 
 @pytest_asyncio.fixture
@@ -35,6 +43,9 @@ def mock_user_id():
 @pytest.fixture
 def mock_anthropic():
     """Mock the Anthropic client to avoid real API calls."""
+    import src.services.anthropic_client as mod
+
+    mod._client = None  # Reset singleton before test
     with patch("src.services.anthropic_client.anthropic.AsyncAnthropic") as mock_cls:
         mock_client = AsyncMock()
         mock_cls.return_value = mock_client
@@ -46,3 +57,5 @@ def mock_anthropic():
         mock_client.messages.create = AsyncMock(return_value=mock_response)
 
         yield mock_client
+
+    mod._client = None  # Reset singleton after test

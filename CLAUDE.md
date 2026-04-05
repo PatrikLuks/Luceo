@@ -75,14 +75,15 @@ src/
 ├── core/                    # Core logic (config, security, crisis detection)
 │   ├── config.py            #   Settings (pydantic-settings, .env)
 │   ├── database.py          #   AsyncEngine, session factory
-│   ├── security.py          #   JWT, bcrypt, AES-256-GCM
+│   ├── security.py          #   JWT, bcrypt, AES-256-GCM, refresh tokens
 │   ├── deps.py              #   get_current_user dependency
 │   ├── crisis.py            #   Crisis detection (ZERO DEPS)
 │   ├── crisis_contacts.py   #   Czech crisis phone numbers
 │   ├── guardrails.py        #   Post-LLM output filter
 │   ├── prompts.py           #   System prompt, disclaimers
 │   ├── audit.py             #   Audit trail logging
-│   └── middleware.py         #   Request logging, security headers
+│   ├── rate_limit.py        #   Rate limiting (slowapi)
+│   └── middleware.py         #   Request logging, security headers (CSP, HSTS)
 ├── models/                  # SQLAlchemy 2.0 ORM models
 │   ├── base.py              #   Base with UUID PK, timestamps
 │   ├── user.py              #   User (email optional!)
@@ -90,7 +91,8 @@ src/
 │   ├── tracking.py          #   SobrietyCheckin + CravingEvent
 │   ├── screening.py         #   ScreeningResult (AUDIT)
 │   ├── knowledge_base.py    #   KnowledgeDocument (pgvector)
-│   └── audit_log.py         #   AuditLog (AI Act compliance)
+│   ├── audit_log.py         #   AuditLog (AI Act compliance)
+│   └── refresh_token.py     #   RefreshToken (SHA-256 hashed)
 ├── services/                # Business logic
 │   ├── chat.py              #   Chat orchestrator (core!)
 │   ├── anthropic_client.py  #   Claude API wrapper
@@ -118,10 +120,12 @@ src/
 - Technické termíny: angličtina
 - Kód a komentáře: angličtina
 
-## Stav implementace (Session 0 + audit)
-- **49 testů** — vše prochází (crisis detection, guardrails, AUDIT scoring)
+## Stav implementace (Session 1)
+- **67 testů** — vše prochází (crisis, guardrails, AUDIT, refresh tokens, rate limiting, middleware)
 - **6 API routerů** — auth, chat, screening, tracking, crisis, admin
-- **19 endpointů** celkem (18 v routerech + /health)
-- **Bezpečnostní audit:** CORS restricted, GDPR erasure complete, ForeignKeys, LIKE injection fix, startup secret validation, zero-width char bypass fix in crisis detection
-- Alembic migrace: TODO
+- **21 endpointů** celkem (20 v routerech + /health)
+- **9 DB tabulek** — users, conversations, messages, sobriety_checkins, craving_events, screening_results, knowledge_documents, audit_logs, refresh_tokens
+- **Bezpečnostní audit:** CORS restricted, GDPR erasure complete (vč. audit_logs + refresh_tokens), ForeignKeys, LIKE injection fix, startup secret validation, zero-width char bypass fix, CSP/HSTS/Permissions-Policy headers, rate limiting (slowapi), audit logging activated
+- **Auth:** JWT access tokens (1h) + refresh tokens (30d, SHA-256 hashed, rotation)
+- **Alembic:** inicializován (async template), env.py nakonfigurován, migrace se generují po připojení k PostgreSQL
 - Frontend: TODO (React Native)

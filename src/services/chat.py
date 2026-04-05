@@ -19,11 +19,12 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.audit import log_audit_event
 from src.core.crisis import CrisisLevel, detect_crisis, get_crisis_response
 from src.core.guardrails import SAFE_FALLBACK, check_response_guardrails
-from src.core.prompts import AI_DISCLAIMER, DISCLAIMER_REMINDER, LUCEO_SYSTEM_PROMPT
+from src.core.prompts import DISCLAIMER_REMINDER, LUCEO_SYSTEM_PROMPT
 from src.core.security import decrypt_field, encrypt_field
-from src.models.conversation import Conversation, Message
+from src.models.conversation import Message
 from src.services.anthropic_client import generate_response
 from src.services.rag import format_context, retrieve_context
 
@@ -131,6 +132,13 @@ async def process_message(
         token_count=token_count,
     )
     db.add(assistant_msg)
+
+    await log_audit_event(
+        db, "chat_message",
+        user_id=user_id,
+        details={"crisis_level": crisis_result.level.value},
+    )
+
     await db.commit()
 
     return {

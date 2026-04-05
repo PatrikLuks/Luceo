@@ -8,6 +8,16 @@ from src.core.config import settings
 
 logger = logging.getLogger("luceo.anthropic")
 
+_client: anthropic.AsyncAnthropic | None = None
+
+
+def _get_client() -> anthropic.AsyncAnthropic:
+    """Lazy singleton — avoids recreating HTTP connection pool on every request."""
+    global _client
+    if _client is None:
+        _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return _client
+
 
 async def generate_response(
     system_prompt: str,
@@ -18,7 +28,7 @@ async def generate_response(
 
     Returns a fallback message on API failure — crisis contacts included.
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = _get_client()
 
     try:
         response = await client.messages.create(

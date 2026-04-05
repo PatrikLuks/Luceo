@@ -6,6 +6,25 @@ Base URL: `/api/v1`
 
 All authenticated endpoints require `Authorization: Bearer <token>` header.
 
+Token flow:
+1. `POST /register` or `POST /login` returns `access_token` (1h) + `refresh_token` (30d)
+2. Use `access_token` in `Authorization: Bearer <token>` header
+3. When access token expires, call `POST /auth/refresh` with the refresh token
+4. Each refresh rotates both tokens (old refresh token is revoked)
+
+## Rate Limiting
+
+All endpoints are rate-limited. Limits apply per user (JWT) or per IP (unauthenticated).
+
+| Endpoint | Limit |
+|---|---|
+| `POST /auth/register`, `/login` | 5/minute |
+| `POST /auth/refresh` | 10/minute |
+| `POST /chat/.../messages` | 20/minute |
+| Tracking, screening write endpoints | 60/minute |
+
+Exceeding returns `429 Too Many Requests`.
+
 ---
 
 ## Auth (`/api/v1/auth`)
@@ -28,6 +47,7 @@ Create a new user account. Email is optional (anonymity feature).
 ```json
 {
   "access_token": "eyJ...",
+  "refresh_token": "abc123...",
   "token_type": "bearer",
   "ai_disclaimer": "Luceo is an AI-powered wellness tool..."
 }
@@ -47,6 +67,33 @@ Create a new user account. Email is optional (anonymity feature).
 
 **Response (200):** Same as register.
 **Errors:** 401 (invalid credentials)
+
+### POST /refresh
+Exchange a valid refresh token for new access + refresh tokens (rotation).
+
+**Auth:** None
+**Body:**
+```json
+{
+  "refresh_token": "abc123..."
+}
+```
+
+**Response (200):** Same as register.
+**Errors:** 401 (invalid refresh token)
+
+### POST /logout
+Revoke a refresh token. Idempotent.
+
+**Auth:** None
+**Body:**
+```json
+{
+  "refresh_token": "abc123..."
+}
+```
+
+**Response:** 204 No Content
 
 ### GET /me
 **Auth:** Required

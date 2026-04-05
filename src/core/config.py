@@ -19,7 +19,8 @@ class Settings(BaseSettings):
 
     # Auth
     jwt_secret: str = "changeme-generate-a-real-secret"
-    jwt_expiration_hours: int = 24
+    jwt_expiration_hours: int = 1  # Short-lived access token (use refresh tokens)
+    refresh_token_expiry_days: int = 30
 
     # Anthropic
     anthropic_api_key: str = ""

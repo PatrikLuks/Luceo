@@ -2,7 +2,7 @@
 
 import logging
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.knowledge_base import KnowledgeDocument

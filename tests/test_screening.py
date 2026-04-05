@@ -1,4 +1,4 @@
-from src.services.screening import score_audit
+from src.services.screening import AUDIT_QUESTIONS, score_audit
 
 
 class TestAuditScoring:
@@ -52,3 +52,24 @@ class TestAuditScoring:
 
         with pytest.raises(ValueError):
             score_audit([0] * 9)
+
+
+class TestAuditQ9Q10Validation:
+    """Q9 and Q10 only accept values {0, 2, 4}, not 1 or 3."""
+
+    def test_q9_q10_valid_values(self):
+        """Valid option values for Q9 and Q10 are {0, 2, 4}."""
+        q9_values = {o.value for o in AUDIT_QUESTIONS[8].options}
+        q10_values = {o.value for o in AUDIT_QUESTIONS[9].options}
+        assert q9_values == {0, 2, 4}
+        assert q10_values == {0, 2, 4}
+
+    def test_q9_value_1_not_in_options(self):
+        """Value 1 is not a valid option for Q9."""
+        q9_values = {o.value for o in AUDIT_QUESTIONS[8].options}
+        assert 1 not in q9_values
+
+    def test_q9_value_3_not_in_options(self):
+        """Value 3 is not a valid option for Q9."""
+        q9_values = {o.value for o in AUDIT_QUESTIONS[8].options}
+        assert 3 not in q9_values

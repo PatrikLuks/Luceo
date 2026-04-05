@@ -1,11 +1,17 @@
+import hashlib
 import os
-from datetime import datetime, timedelta, timezone
+import secrets
+import uuid
+from datetime import UTC, datetime, timedelta
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.models.refresh_token import RefreshToken
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -23,7 +29,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (
+    expire = datetime.now(UTC) + (
         expires_delta or timedelta(hours=settings.jwt_expiration_hours)
     )
     to_encode["exp"] = expire
@@ -37,13 +43,54 @@ def decode_access_token(token: str) -> dict:
         raise ValueError("Invalid or expired token") from e
 
 
+# --- Refresh tokens (SHA-256 hash for O(1) index lookup) ---
+
+
+def _hash_token(raw_token: str) -> str:
+    """SHA-256 hash of a refresh token — deterministic, allows index lookup."""
+    return hashlib.sha256(raw_token.encode()).hexdigest()
+
+
+async def create_refresh_token(user_id: uuid.UUID, db: AsyncSession) -> str:
+    """Generate a secure refresh token, store its hash, return the raw token."""
+    raw_token = secrets.token_urlsafe(64)
+    entry = RefreshToken(
+        user_id=user_id,
+        token_hash=_hash_token(raw_token),
+        expires_at=datetime.now(UTC)
+        + timedelta(days=settings.refresh_token_expiry_days),
+    )
+    db.add(entry)
+    return raw_token
+
+
+async def verify_refresh_token(raw_token: str, db: AsyncSession) -> RefreshToken:
+    """Find and validate a refresh token. Raises ValueError if invalid."""
+    token_hash = _hash_token(raw_token)
+    now = datetime.now(UTC)
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.revoked_at.is_(None),
+            RefreshToken.expires_at > now,
+        )
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise ValueError("Invalid or expired refresh token")
+    return entry
+
+
+async def revoke_refresh_token(token_entry: RefreshToken) -> None:
+    """Revoke a refresh token (soft-delete). Caller must commit."""
+    token_entry.revoked_at = datetime.now(UTC)
+
+
 # AES-256-GCM field-level encryption
 def _get_aes_key() -> bytes:
     key_hex = settings.encryption_key
     if len(key_hex) < 64:
         # Pad/hash short keys for dev — in production use a proper 32-byte hex key
-        import hashlib
-
         key_hex = hashlib.sha256(key_hex.encode()).hexdigest()
     return bytes.fromhex(key_hex[:64])
 

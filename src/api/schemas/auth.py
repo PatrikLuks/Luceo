@@ -18,10 +18,15 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     ai_disclaimer: str = (
         "Luceo is an AI-powered wellness tool, not a medical device or therapist replacement."
     )
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
 
 
 class UserResponse(BaseModel):

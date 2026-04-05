@@ -10,14 +10,6 @@ class SendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
 
 
-class MessageResponse(BaseModel):
-    id: uuid.UUID
-    role: str
-    content: str
-    created_at: datetime
-    crisis_detected: bool = False
-
-
 class ChatResponse(BaseModel):
     message: str
     crisis_detected: bool
