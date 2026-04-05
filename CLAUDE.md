@@ -18,12 +18,12 @@ Primární zaměření MVP: **alkoholismus** v ČR. Globální ambice.
 - **Clinical Advisor** — TBD (kritická mezera)
 - **Legal Advisor** — TBD (kritická mezera)
 
-## Technický stack (navrhovaný)
+## Technický stack
 - **LLM:** Claude API (Anthropic) s RAG architekturou
-- **RAG:** pgvector nebo Pinecone
-- **Backend:** Node.js nebo Python (FastAPI) — TBD
+- **RAG:** pgvector (PostgreSQL)
+- **Backend:** Python (FastAPI) — rozhodnuto DEC-008
 - **DB:** PostgreSQL + pgvector
-- **Auth:** Supabase nebo vlastní JWT (GDPR-compliant)
+- **Auth:** Vlastní JWT (GDPR-compliant)
 - **Frontend:** React Native (mobile-first)
 - **Hosting:** EU region povinně
 

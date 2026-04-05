@@ -103,6 +103,22 @@
 
 ---
 
+### DEC-008 | Backend stack: Python (FastAPI)
+**Datum:** 5. dubna 2026
+**Rozhodnutí:** Backend MVP je **Python s FastAPI**.
+**Proč:**
+- Silnější AI/ML ekosystém než Node.js — jednodušší integrace s Anthropic SDK, pgvector, sentence-transformers
+- Rychlejší prototypování pro RAG pipeline a crisis detection
+- Async-native (FastAPI + asyncpg) = moderní, výkonný stack
+- PM preferuje Python pro MVP fázi
+
+**Zamítnuté alternativy:**
+- *Node.js (Express/Fastify)* — sdílený jazyk s React Native frontendem, ale slabší AI tooling
+
+**Rozhodl:** PM (na základě doporučení)
+
+---
+
 ## ŠABLONA PRO BUDOUCÍ ROZHODNUTÍ
 
 ```
