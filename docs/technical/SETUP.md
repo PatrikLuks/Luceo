@@ -63,17 +63,15 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 # Install pgvector extension (PostgreSQL)
 CREATE EXTENSION IF NOT EXISTS vector;
 
-# Run migrations (when Alembic is configured)
+# Run migrations
 alembic upgrade head
 ```
 
-**Note:** Alembic initialization is pending. For MVP development, tables can be created via:
-```python
-from src.models.base import Base
-from src.core.database import engine
+**Note:** Alembic is initialized with async template. `alembic/env.py` imports all 9 models and sets database URL from settings. Migration files are generated when connected to a PostgreSQL instance:
 
-async with engine.begin() as conn:
-    await conn.run_sync(Base.metadata.create_all)
+```bash
+alembic revision --autogenerate -m "Initial tables"
+alembic upgrade head
 ```
 
 ## Running Tests
@@ -96,7 +94,7 @@ Tests use **SQLite in-memory** — no PostgreSQL required. The `conftest.py` pro
 
 ## Project Structure
 
-See `docs/FILE_MAP.md` for a complete file listing, or `docs/ARCHITECTURE.md` for system design.
+See `docs/technical/FILE_MAP.md` for a complete file listing, or `docs/technical/ARCHITECTURE.md` for system design.
 
 ## Development Notes
 

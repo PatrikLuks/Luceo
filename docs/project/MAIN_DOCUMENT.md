@@ -108,10 +108,10 @@ Zpřístupnit efektivní podporu při závislosti každému člověku — bez oh
 | Vrstva | Technologie | Poznámka |
 |---|---|---|
 | **LLM** | Claude API (Anthropic) | Core AI engine |
-| **RAG** | pgvector nebo Pinecone | Semantic search přes klinickou databázi |
-| **Backend** | Node.js nebo Python (FastAPI) | TBD podle preference PM |
+| **RAG** | pgvector (PostgreSQL) | Semantic search přes klinickou databázi |
+| **Backend** | Python (FastAPI) | Rozhodnuto DEC-008 |
 | **Databáze** | PostgreSQL + pgvector | User data + vector store |
-| **Auth** | Supabase nebo vlastní JWT | GDPR-compliant |
+| **Auth** | Vlastní JWT | GDPR-compliant, refresh tokens |
 | **Frontend** | React Native (mobile-first) | iOS + Android |
 | **Hosting** | EU region povinně | GDPR požadavek |
 

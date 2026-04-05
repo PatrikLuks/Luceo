@@ -32,7 +32,7 @@ Luceo is an AI-powered addiction recovery support platform. The MVP backend is a
 │  │         Models Layer (src/models/)                 │  │
 │  │  User, Conversation, Message, SobrietyCheckin,    │  │
 │  │  CravingEvent, ScreeningResult, KnowledgeDocument,│  │
-│  │  AuditLog                                          │  │
+│  │  AuditLog, RefreshToken                             │  │
 │  └───────────────────┬───────────────────────────────┘  │
 │                      │                                   │
 │           PostgreSQL + pgvector                          │
@@ -50,14 +50,15 @@ Luceo is an AI-powered addiction recovery support platform. The MVP backend is a
 ### Core Layer (`src/core/`)
 - **config.py** — Settings via pydantic-settings, reads `.env`
 - **database.py** — AsyncEngine, session factory, `get_db()` dependency
-- **security.py** — JWT (HS256), bcrypt, AES-256-GCM encryption
+- **security.py** — JWT (HS256), bcrypt, AES-256-GCM, refresh tokens
 - **crisis.py** — Crisis detection (keyword matching, no dependencies)
 - **crisis_contacts.py** — Czech crisis phone numbers (hardcoded)
 - **guardrails.py** — Post-LLM output filtering (diagnoses, medications)
 - **prompts.py** — System prompt, AI disclaimer
 - **deps.py** — `get_current_user` FastAPI dependency
 - **audit.py** — Audit trail logging (AI Act compliance)
-- **middleware.py** — Request logging, security headers
+- **rate_limit.py** — Rate limiting with JWT/IP key extraction (slowapi)
+- **middleware.py** — Request logging, security headers (CSP, HSTS, Permissions-Policy)
 
 ### Services Layer (`src/services/`)
 - **chat.py** — Chat orchestrator (crisis → RAG → LLM → guardrails → store)
@@ -114,7 +115,7 @@ User message
 | Layer | Mechanism | Purpose |
 |---|---|---|
 | Transport | HTTPS (infrastructure) | Encryption in transit |
-| Authentication | JWT HS256 (24h expiry) | User identity |
+| Authentication | JWT HS256 (1h) + refresh tokens (30d, SHA-256) | User identity |
 | Data at rest | AES-256-GCM per-field | GDPR encryption |
 | Crisis detection | Keyword matching pre-LLM | Immediate safety |
 | Output guardrails | Regex post-LLM | Prevent diagnoses/medications |
@@ -123,6 +124,8 @@ User message
 | User deletion | Soft delete + PII wipe | GDPR Art. 17 |
 | CORS | Middleware (configure per env) | Cross-origin protection |
 | Headers | X-Content-Type-Options, X-Frame-Options | XSS/clickjacking |
+| Rate limiting | slowapi (JWT/IP key, per-endpoint) | Abuse prevention |
+| Security headers | CSP, HSTS (prod), Permissions-Policy | Content security |
 
 ## Key Architectural Decisions
 

@@ -2,7 +2,7 @@
 **Verze:** 1.0
 **Datum:** 5. dubna 2026
 **Status:** Aktivní — prioritizované kroky synthesizované z výzkumných reportů
-**Zdroje:** LUCEO_MAIN_DOCUMENT_v1.md, luceo-deep-research.md, zprava-hluboky-vyzkum.md
+**Zdroje:** docs/project/MAIN_DOCUMENT.md, docs/research/deep-research.md, docs/research/technical-research.md
 
 ---
 
@@ -168,7 +168,6 @@ Z výzkumných reportů vyplývají tyto non-negotiable požadavky:
 ## OTEVŘENÉ OTÁZKY (k rozhodnutí PM)
 
 - [ ] Legal entity — s.r.o. nebo a.s.? Součást JPL Servis nebo samostatně?
-- [ ] Backend: Node.js nebo Python (FastAPI)?
 - [ ] Mobile-first (React Native) nebo web-first v MVP?
 - [ ] Freemium nebo subscription od začátku?
 - [ ] Corporate wellness (Fáze 2 místo 3)?

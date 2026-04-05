@@ -6,28 +6,56 @@ Complete listing of every file and its purpose. Use this as the entry point when
 
 | File | Purpose |
 |---|---|
+| `CLAUDE.md` | Instructions for AI assistants working on this project |
 | `pyproject.toml` | Project metadata, dependencies, tool config |
 | `.env.example` | Environment variable template |
 | `.gitignore` | Git ignore patterns |
-| `CLAUDE.md` | Instructions for AI assistants working on this project |
-| `LUCEO_MAIN_DOCUMENT_v1.md` | Primary source of truth — vision, team, problem, solution |
-| `LUCEO_ACTION_PLAN.md` | Consolidated action plan with phases |
-| `LUCEO_DECISION_LOG.md` | Log of all key decisions (DEC-001 through DEC-008) |
-| `LUCEO_PERSONAS.md` | User personas (Karel, Tereza, Jana, MUDr. Novák) |
-| `luceo-deep-research.md` | Deep research — DTx market, competition, regulation |
-| `zprava-hluboky-vyzkum.md` | Technical research — clinical procedures, architecture |
+| `alembic.ini` | Alembic configuration (`sqlalchemy.url` set programmatically) |
 
-## `docs/`
+## `docs/project/` — Project Documentation
+
+| File | Purpose |
+|---|---|
+| `MAIN_DOCUMENT.md` | Primary source of truth — vision, team, problem, solution, roadmap |
+| `DECISION_LOG.md` | Log of all key decisions (DEC-001 through DEC-008) |
+| `PERSONAS.md` | User personas (Karel, Tereza, Jana, MUDr. Novák) |
+| `ACTION_PLAN.md` | Consolidated action plan with phases |
+
+## `docs/business/` — Business & Investor Documents
+
+| File | Purpose |
+|---|---|
+| `EXECUTIVE_SUMMARY.md` | 2-page summary for business partners |
+| `PITCH_DECK_OUTLINE.md` | 12-slide pitch deck skeleton |
+
+## `docs/research/` — Research
+
+| File | Purpose |
+|---|---|
+| `deep-research.md` | Deep research — DTx market, competition, regulation, grants |
+| `technical-research.md` | Technical research — clinical procedures, architecture, validation |
+
+## `docs/technical/` — Technical Documentation
 
 | File | Purpose |
 |---|---|
 | `ARCHITECTURE.md` | System architecture, layer diagram, chat flow, security |
 | `API_REFERENCE.md` | Complete API endpoint documentation |
 | `FILE_MAP.md` | This file — project file listing |
-| `EXECUTIVE_SUMMARY.md` | 2-page summary for business partners |
-| `PITCH_DECK_OUTLINE.md` | 12-slide pitch deck skeleton |
 | `SETUP.md` | Development setup and running instructions |
 | `SAFETY.md` | Crisis detection and guardrails documentation |
+
+## `docs/reports/` — Session Reports
+
+| File | Purpose |
+|---|---|
+| `REPORT_2026-04-05.md` | Session report (2026-04-05) |
+
+## `alembic/` — Database Migrations
+
+| File | Purpose |
+|---|---|
+| `env.py` | Alembic async migration environment |
 
 ## `src/core/` — Core Logic
 
@@ -42,6 +70,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | `guardrails.py` | `check_response_guardrails()` — post-LLM regex checks | **NONE** (re only) |
 | `prompts.py` | System prompt, AI disclaimer, disclaimer reminder | **NONE** |
 | `audit.py` | `log_audit_event()` — AI Act / GDPR audit trail | models.audit_log |
+| `rate_limit.py` | Rate limiting key function (JWT/IP extraction) | slowapi |
 | `middleware.py` | `RequestLoggingMiddleware`, `SecurityHeadersMiddleware` | starlette |
 | `__init__.py` | Package marker | — |
 
@@ -56,6 +85,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | `screening.py` | `ScreeningResult` | `screening_results` |
 | `knowledge_base.py` | `KnowledgeDocument` (with pgvector) | `knowledge_documents` |
 | `audit_log.py` | `AuditLog` | `audit_logs` |
+| `refresh_token.py` | `RefreshToken` | `refresh_tokens` |
 | `__init__.py` | Package marker | — |
 
 ## `src/services/` — Business Logic
@@ -73,7 +103,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 
 | File | Prefix | Auth | Endpoints |
 |---|---|---|---|
-| `auth.py` | `/api/v1/auth` | Mixed | POST /register, POST /login, GET /me, DELETE /me |
+| `auth.py` | `/api/v1/auth` | Mixed | POST /register, POST /login, GET /me, DELETE /me, POST /refresh, POST /logout |
 | `chat.py` | `/api/v1/chat` | Yes | POST /conversations, POST /conversations/{id}/messages, GET /conversations |
 | `screening.py` | `/api/v1/screening` | Mixed | GET /questionnaires/audit (no auth), POST /questionnaires/audit, GET /results |
 | `tracking.py` | `/api/v1/tracking` | Yes | POST /checkin, GET /checkin/today, POST /cravings, GET /cravings, GET /summary, GET /streak |
@@ -86,8 +116,8 @@ Complete listing of every file and its purpose. Use this as the entry point when
 
 | File | Models |
 |---|---|
-| `auth.py` | `RegisterRequest`, `LoginRequest`, `TokenResponse`, `UserResponse` |
-| `chat.py` | `SendMessageRequest`, `MessageResponse`, `ChatResponse`, `ConversationResponse` |
+| `auth.py` | `RegisterRequest`, `LoginRequest`, `TokenResponse`, `UserResponse`, `RefreshRequest` |
+| `chat.py` | `SendMessageRequest`, `ChatResponse`, `ConversationResponse` |
 | `screening.py` | `AuditSubmission`, `AuditResultResponse` |
 | `tracking.py` | `CheckinRequest/Response`, `CravingRequest/Response`, `TrackingSummary` |
 | `__init__.py` | Package marker |
@@ -100,8 +130,11 @@ FastAPI app with CORS middleware, security headers middleware, request logging m
 
 | File | Coverage |
 |---|---|
-| `conftest.py` | Shared fixtures: async SQLite session, mock Anthropic client |
-| `test_crisis.py` | 30 tests: normalize_text, CRITICAL/HIGH/MEDIUM/NONE detection, crisis responses |
+| `conftest.py` | Shared fixtures: async SQLite session, mock Anthropic client, all 9 model imports |
+| `test_crisis.py` | 32 tests: normalize_text, zero-width bypass, CRITICAL/HIGH/MEDIUM/NONE detection, crisis responses |
 | `test_guardrails.py` | 7 tests: diagnostic patterns, medication patterns, safe fallback |
-| `test_screening.py` | 10 tests: AUDIT scoring boundary tests |
+| `test_screening.py` | 13 tests: AUDIT scoring boundary tests, Q9/Q10 validation |
+| `test_auth.py` | 7 tests: refresh token create, verify, expire, revoke, rotation, hash |
+| `test_rate_limit.py` | 3 tests: JWT key extraction, IP fallback, invalid JWT |
+| `test_middleware.py` | 5 tests: CSP, HSTS prod/dev, Permissions-Policy, basic headers |
 | `__init__.py` | Package marker |

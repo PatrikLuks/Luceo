@@ -120,8 +120,12 @@ The triggering event is logged with the reason for audit trail.
 
 ## Test Coverage
 
-- `tests/test_crisis.py` — 30 tests covering all crisis levels, diacritics normalization, edge cases
+- `tests/test_crisis.py` — 32 tests covering all crisis levels, diacritics normalization, zero-width char bypass, edge cases
 - `tests/test_guardrails.py` — 7 tests covering diagnostic and medication pattern detection
+- `tests/test_auth.py` — 7 tests covering refresh token lifecycle
+- `tests/test_rate_limit.py` — 3 tests covering rate limit key extraction
+- `tests/test_middleware.py` — 5 tests covering security headers (CSP, HSTS, Permissions-Policy)
+- `tests/test_screening.py` — 13 tests covering AUDIT scoring boundaries and Q9/Q10 validation
 
 ## Future Work
 - ML-based crisis detection (complementing, not replacing, keyword matching)

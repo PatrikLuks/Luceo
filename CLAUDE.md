@@ -47,26 +47,39 @@ Primární zaměření MVP: **alkoholismus** v ČR. Globální ambice.
 
 ## Struktura dokumentů
 
-### Projektová dokumentace (root)
+### Projektová dokumentace (`docs/project/`)
 | Soubor | Účel |
 |---|---|
-| `LUCEO_MAIN_DOCUMENT_v1.md` | **Primární zdroj pravdy** — vize, tým, problém, řešení, roadmapa |
-| `LUCEO_DECISION_LOG.md` | Log všech klíčových rozhodnutí (DEC-001 až DEC-008) |
-| `LUCEO_PERSONAS.md` | User persony (Karel, Tereza, Jana, MUDr. Novák) |
-| `LUCEO_ACTION_PLAN.md` | Konsolidovaný akční plán s konkrétními kroky |
-| `luceo-deep-research.md` | Hloubkový výzkum — DTx trh, konkurence, regulace, granty |
-| `zprava-hluboky-vyzkum.md` | Technický výzkum — klinické postupy, architektura, validace |
+| `docs/project/MAIN_DOCUMENT.md` | **Primární zdroj pravdy** — vize, tým, problém, řešení, roadmapa |
+| `docs/project/DECISION_LOG.md` | Log všech klíčových rozhodnutí (DEC-001 až DEC-008) |
+| `docs/project/PERSONAS.md` | User persony (Karel, Tereza, Jana, MUDr. Novák) |
+| `docs/project/ACTION_PLAN.md` | Konsolidovaný akční plán s konkrétními kroky |
 
-### Technická dokumentace (`docs/`)
+### Business dokumenty (`docs/business/`)
 | Soubor | Účel |
 |---|---|
-| `docs/ARCHITECTURE.md` | Systémová architektura, vrstvy, chat flow, bezpečnost |
-| `docs/API_REFERENCE.md` | Kompletní API reference všech endpointů |
-| `docs/FILE_MAP.md` | Mapa všech souborů v projektu s popisem |
-| `docs/SETUP.md` | Dev setup, spuštění, env variables |
-| `docs/SAFETY.md` | Crisis detection, guardrails, bezpečnostní dokumentace |
-| `docs/EXECUTIVE_SUMMARY.md` | 2-stránkový executive summary pro partnery |
-| `docs/PITCH_DECK_OUTLINE.md` | 12-slide pitch deck |
+| `docs/business/EXECUTIVE_SUMMARY.md` | 2-stránkový executive summary pro partnery |
+| `docs/business/PITCH_DECK_OUTLINE.md` | 12-slide pitch deck |
+
+### Výzkum (`docs/research/`)
+| Soubor | Účel |
+|---|---|
+| `docs/research/deep-research.md` | Hloubkový výzkum — DTx trh, konkurence, regulace, granty |
+| `docs/research/technical-research.md` | Technický výzkum — klinické postupy, architektura, validace |
+
+### Technická dokumentace (`docs/technical/`)
+| Soubor | Účel |
+|---|---|
+| `docs/technical/ARCHITECTURE.md` | Systémová architektura, vrstvy, chat flow, bezpečnost |
+| `docs/technical/API_REFERENCE.md` | Kompletní API reference všech endpointů |
+| `docs/technical/FILE_MAP.md` | Mapa všech souborů v projektu s popisem |
+| `docs/technical/SETUP.md` | Dev setup, spuštění, env variables |
+| `docs/technical/SAFETY.md` | Crisis detection, guardrails, bezpečnostní dokumentace |
+
+### Reporty (`docs/reports/`)
+| Soubor | Účel |
+|---|---|
+| `docs/reports/REPORT_2026-04-05.md` | Session 1 report — refresh tokens, rate limiting, Alembic, security |
 
 ## Backend architektura (src/)
 ```
