@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,7 +12,7 @@ class ScreeningResult(BaseModel):
     __tablename__ = "screening_results"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     questionnaire_type: Mapped[str] = mapped_column(String(20), default="AUDIT")
     answers: Mapped[dict] = mapped_column(JSON)

@@ -1,13 +1,16 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from src.core.database import get_db
 from src.core.deps import get_current_user
 from src.core.security import create_access_token, hash_password, verify_password
+from src.models.conversation import Conversation, Message
+from src.models.screening import ScreeningResult
+from src.models.tracking import CravingEvent, SobrietyCheckin
 from src.models.user import User
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -71,9 +74,24 @@ async def get_me(user: User = Depends(get_current_user)):
 async def delete_me(
     user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    """GDPR Article 17 — right to erasure. Soft-deletes user and wipes PII."""
+    """GDPR Article 17 — right to erasure. Soft-deletes user and wipes ALL PII."""
+    # Delete related data (messages first due to FK, then conversations)
+    user_convos = await db.execute(
+        select(Conversation.id).where(Conversation.user_id == user.id)
+    )
+    convo_ids = [row[0] for row in user_convos.all()]
+    if convo_ids:
+        await db.execute(delete(Message).where(Message.conversation_id.in_(convo_ids)))
+        await db.execute(delete(Conversation).where(Conversation.user_id == user.id))
+
+    await db.execute(delete(ScreeningResult).where(ScreeningResult.user_id == user.id))
+    await db.execute(delete(SobrietyCheckin).where(SobrietyCheckin.user_id == user.id))
+    await db.execute(delete(CravingEvent).where(CravingEvent.user_id == user.id))
+
+    # Wipe user PII
     user.is_active = False
     user.deleted_at = datetime.now(timezone.utc)
     user.email = None
     user.display_name = None
+    user.password_hash = "REDACTED"
     await db.commit()

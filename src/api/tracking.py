@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -135,7 +135,7 @@ async def list_cravings(
 
 @router.get("/summary", response_model=TrackingSummary)
 async def get_summary(
-    days: int = 30,
+    days: int = Query(30, ge=1, le=365),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

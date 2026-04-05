@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,7 +12,7 @@ class SobrietyCheckin(BaseModel):
     __tablename__ = "sobriety_checkins"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     date: Mapped[date] = mapped_column(Date, nullable=False)
     is_sober: Mapped[bool] = mapped_column(Boolean)
@@ -21,8 +21,7 @@ class SobrietyCheckin(BaseModel):
     notes_encrypted: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
-        # One check-in per user per day
-        {"sqlite_autoincrement": True},
+        UniqueConstraint("user_id", "date", name="uq_checkin_user_date"),
     )
 
 
@@ -30,7 +29,7 @@ class CravingEvent(BaseModel):
     __tablename__ = "craving_events"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
     intensity: Mapped[int] = mapped_column(Integer)  # 1-10
     trigger_category: Mapped[str] = mapped_column(

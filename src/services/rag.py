@@ -20,11 +20,13 @@ async def retrieve_context(
     For MVP without embedding infrastructure, falls back to keyword-based
     search. When embeddings are populated, uses pgvector cosine similarity.
     """
-    # MVP fallback: simple keyword search using PostgreSQL ts_vector
+    # MVP fallback: simple keyword search using PostgreSQL ilike
     # TODO: Replace with proper embedding-based search when embedding service is ready
+    # Escape LIKE-special chars to prevent pattern injection
+    safe_query = query[:100].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     result = await db.execute(
         select(KnowledgeDocument)
-        .where(KnowledgeDocument.content.ilike(f"%{query[:100]}%"))
+        .where(KnowledgeDocument.content.ilike(f"%{safe_query}%"))
         .limit(top_k)
     )
     docs = list(result.scalars().all())

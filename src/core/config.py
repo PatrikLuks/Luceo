@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Encryption
     encryption_key: str = "changeme-generate-a-real-key"
 
+    # CORS
+    cors_allowed_origins: str = ""  # Comma-separated origins for production
+
     # GDPR
     data_region: str = "eu-central"
 
@@ -47,3 +50,18 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def validate_production_settings() -> None:
+    """Ensure critical secrets are set in non-development environments."""
+    if settings.app_env == "development":
+        return
+    errors = []
+    if settings.jwt_secret.startswith("changeme"):
+        errors.append("jwt_secret must be set to a real secret in production")
+    if settings.encryption_key.startswith("changeme"):
+        errors.append("encryption_key must be a 64-char hex string in production")
+    if not settings.anthropic_api_key:
+        errors.append("anthropic_api_key must be set in production")
+    if errors:
+        raise RuntimeError(f"Production configuration errors: {'; '.join(errors)}")

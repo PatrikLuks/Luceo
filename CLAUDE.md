@@ -46,16 +46,81 @@ Primární zaměření MVP: **alkoholismus** v ČR. Globální ambice.
 - **Fáze 3** (2027): Scale — klinická validace, B2B, internacionalizace
 
 ## Struktura dokumentů
+
+### Projektová dokumentace (root)
 | Soubor | Účel |
 |---|---|
 | `LUCEO_MAIN_DOCUMENT_v1.md` | **Primární zdroj pravdy** — vize, tým, problém, řešení, roadmapa |
-| `LUCEO_DECISION_LOG.md` | Log všech klíčových rozhodnutí |
+| `LUCEO_DECISION_LOG.md` | Log všech klíčových rozhodnutí (DEC-001 až DEC-008) |
 | `LUCEO_PERSONAS.md` | User persony (Karel, Tereza, Jana, MUDr. Novák) |
+| `LUCEO_ACTION_PLAN.md` | Konsolidovaný akční plán s konkrétními kroky |
 | `luceo-deep-research.md` | Hloubkový výzkum — DTx trh, konkurence, regulace, granty |
 | `zprava-hluboky-vyzkum.md` | Technický výzkum — klinické postupy, architektura, validace |
-| `LUCEO_ACTION_PLAN.md` | Konsolidovaný akční plán s konkrétními kroky |
+
+### Technická dokumentace (`docs/`)
+| Soubor | Účel |
+|---|---|
+| `docs/ARCHITECTURE.md` | Systémová architektura, vrstvy, chat flow, bezpečnost |
+| `docs/API_REFERENCE.md` | Kompletní API reference všech endpointů |
+| `docs/FILE_MAP.md` | Mapa všech souborů v projektu s popisem |
+| `docs/SETUP.md` | Dev setup, spuštění, env variables |
+| `docs/SAFETY.md` | Crisis detection, guardrails, bezpečnostní dokumentace |
+| `docs/EXECUTIVE_SUMMARY.md` | 2-stránkový executive summary pro partnery |
+| `docs/PITCH_DECK_OUTLINE.md` | 12-slide pitch deck |
+
+## Backend architektura (src/)
+```
+src/
+├── main.py                  # FastAPI entry point
+├── core/                    # Core logic (config, security, crisis detection)
+│   ├── config.py            #   Settings (pydantic-settings, .env)
+│   ├── database.py          #   AsyncEngine, session factory
+│   ├── security.py          #   JWT, bcrypt, AES-256-GCM
+│   ├── deps.py              #   get_current_user dependency
+│   ├── crisis.py            #   Crisis detection (ZERO DEPS)
+│   ├── crisis_contacts.py   #   Czech crisis phone numbers
+│   ├── guardrails.py        #   Post-LLM output filter
+│   ├── prompts.py           #   System prompt, disclaimers
+│   ├── audit.py             #   Audit trail logging
+│   └── middleware.py         #   Request logging, security headers
+├── models/                  # SQLAlchemy 2.0 ORM models
+│   ├── base.py              #   Base with UUID PK, timestamps
+│   ├── user.py              #   User (email optional!)
+│   ├── conversation.py      #   Conversation + Message (encrypted)
+│   ├── tracking.py          #   SobrietyCheckin + CravingEvent
+│   ├── screening.py         #   ScreeningResult (AUDIT)
+│   ├── knowledge_base.py    #   KnowledgeDocument (pgvector)
+│   └── audit_log.py         #   AuditLog (AI Act compliance)
+├── services/                # Business logic
+│   ├── chat.py              #   Chat orchestrator (core!)
+│   ├── anthropic_client.py  #   Claude API wrapper
+│   ├── rag.py               #   Knowledge base retrieval
+│   ├── screening.py         #   WHO AUDIT scoring
+│   └── tracking.py          #   Streak calculation, summaries
+└── api/                     # HTTP endpoints
+    ├── router.py             #   All routers aggregated
+    ├── auth.py               #   /api/v1/auth/*
+    ├── chat.py               #   /api/v1/chat/*
+    ├── screening.py          #   /api/v1/screening/*
+    ├── tracking.py           #   /api/v1/tracking/*
+    ├── crisis.py             #   /api/v1/crisis/*
+    ├── admin.py              #   /api/v1/admin/* (GDPR export)
+    └── schemas/              #   Pydantic request/response models
+```
+
+## Kritické bezpečnostní moduly
+- `src/core/crisis.py` — **SAFETY-CRITICAL**. Intentionally zero dependencies. Runs before LLM.
+- `src/core/guardrails.py` — Post-LLM filter. Prevents diagnoses and medication recommendations.
+- Oba moduly vyžadují review clinical advisorem před production deploymentem.
 
 ## Jazyk
 - Primární jazyk dokumentace: **čeština**
 - Technické termíny: angličtina
 - Kód a komentáře: angličtina
+
+## Stav implementace (Session 0 + audit)
+- **47 testů** — vše prochází (crisis detection, guardrails, AUDIT scoring)
+- **6 API routerů** — auth, chat, screening, tracking, crisis, admin
+- **23 endpointů** celkem
+- Alembic migrace: TODO
+- Frontend: TODO (React Native)

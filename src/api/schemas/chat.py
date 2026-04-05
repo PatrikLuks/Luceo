@@ -21,7 +21,7 @@ class MessageResponse(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     crisis_detected: bool
-    crisis_contacts: list[dict] | None = None
+    crisis_contacts: list[CrisisContact] | None = None
     disclaimer: str | None = None
 
 
