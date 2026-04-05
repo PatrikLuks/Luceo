@@ -119,8 +119,9 @@ src/
 - Kód a komentáře: angličtina
 
 ## Stav implementace (Session 0 + audit)
-- **47 testů** — vše prochází (crisis detection, guardrails, AUDIT scoring)
+- **49 testů** — vše prochází (crisis detection, guardrails, AUDIT scoring)
 - **6 API routerů** — auth, chat, screening, tracking, crisis, admin
 - **23 endpointů** celkem
+- **Bezpečnostní audit:** CORS restricted, GDPR erasure complete, ForeignKeys, LIKE injection fix, startup secret validation, zero-width char bypass fix in crisis detection
 - Alembic migrace: TODO
 - Frontend: TODO (React Native)

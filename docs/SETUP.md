@@ -44,6 +44,9 @@ See `.env.example` for a complete template. Key variables:
 | `JWT_SECRET` | Yes (prod) | `changeme-...` | JWT signing secret |
 | `ANTHROPIC_API_KEY` | For chat | — | Claude API key |
 | `ENCRYPTION_KEY` | For chat | — | 32-byte hex string for AES-256-GCM |
+| `CORS_ALLOWED_ORIGINS` | For prod | — | Comma-separated allowed origins |
+
+**Production note:** The server validates critical secrets on startup when `APP_ENV != development`. Deployment with default `changeme` values will fail.
 
 Generate secrets:
 ```bash
