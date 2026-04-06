@@ -7,10 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.schemas.tracking import (
     CheckinRequest,
     CheckinResponse,
+    CravingListItem,
     CravingRequest,
     CravingResponse,
+    StreakResponse,
+    TodayCheckinResponse,
     TrackingSummary,
 )
+from src.core.audit import log_audit_event
 from src.core.database import get_db
 from src.core.deps import get_current_user
 from src.core.rate_limit import limiter
@@ -59,13 +63,19 @@ async def daily_checkin(
         )
         db.add(checkin)
 
+    await log_audit_event(
+        db, "checkin_logged",
+        user_id=user.id,
+        details={"is_sober": body.is_sober},
+        ip_address=request.client.host if request.client else None,
+    )
     await db.commit()
 
     streak = await get_sobriety_streak(user.id, db)
     return CheckinResponse(date=today, is_sober=body.is_sober, mood=body.mood, streak=streak)
 
 
-@router.get("/checkin/today")
+@router.get("/checkin/today", response_model=TodayCheckinResponse)
 async def get_today_checkin(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -79,14 +89,14 @@ async def get_today_checkin(
     )
     checkin = result.scalar_one_or_none()
     if not checkin:
-        return {"checked_in": False}
+        return TodayCheckinResponse(checked_in=False)
 
-    return {
-        "checked_in": True,
-        "is_sober": checkin.is_sober,
-        "mood": checkin.mood,
-        "energy_level": checkin.energy_level,
-    }
+    return TodayCheckinResponse(
+        checked_in=True,
+        is_sober=checkin.is_sober,
+        mood=checkin.mood,
+        energy_level=checkin.energy_level,
+    )
 
 
 @router.post("/cravings", response_model=CravingResponse, status_code=status.HTTP_201_CREATED)
@@ -109,13 +119,22 @@ async def log_craving(
         outcome=body.outcome,
     )
     db.add(event)
+
+    await log_audit_event(
+        db, "craving_logged",
+        user_id=user.id,
+        details={"intensity": body.intensity, "trigger_category": body.trigger_category},
+        ip_address=request.client.host if request.client else None,
+    )
     await db.commit()
     await db.refresh(event)
     return event
 
 
-@router.get("/cravings")
+@router.get("/cravings", response_model=list[CravingListItem])
 async def list_cravings(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -124,19 +143,10 @@ async def list_cravings(
         select(CravingEvent)
         .where(CravingEvent.user_id == user.id)
         .order_by(CravingEvent.created_at.desc())
-        .limit(100)
+        .offset(skip)
+        .limit(limit)
     )
-    events = result.scalars().all()
-    return [
-        {
-            "id": str(e.id),
-            "intensity": e.intensity,
-            "trigger_category": e.trigger_category,
-            "outcome": e.outcome,
-            "created_at": e.created_at.isoformat(),
-        }
-        for e in events
-    ]
+    return result.scalars().all()
 
 
 @router.get("/summary", response_model=TrackingSummary)
@@ -150,11 +160,11 @@ async def get_summary(
     return TrackingSummary(**summary)
 
 
-@router.get("/streak")
+@router.get("/streak", response_model=StreakResponse)
 async def get_streak(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get current sobriety streak."""
     streak = await get_sobriety_streak(user.id, db)
-    return {"current_streak": streak}
+    return StreakResponse(current_streak=streak)

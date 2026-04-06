@@ -18,9 +18,18 @@ class CheckinResponse(BaseModel):
     streak: int
 
 
+class TodayCheckinResponse(BaseModel):
+    checked_in: bool
+    is_sober: bool | None = None
+    mood: int | None = None
+    energy_level: int | None = None
+
+
 class CravingRequest(BaseModel):
     intensity: int = Field(ge=1, le=10)
-    trigger_category: str = Field(pattern="^(stress|social|emotional|habitual|environmental|other)$")
+    trigger_category: str = Field(
+        pattern="^(stress|social|emotional|habitual|environmental|other)$"
+    )
     trigger_notes: str | None = Field(None, max_length=2000)
     coping_strategy_used: str | None = Field(None, max_length=200)
     outcome: str | None = Field(None, pattern="^(resisted|gave_in)$")
@@ -35,6 +44,16 @@ class CravingResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class CravingListItem(BaseModel):
+    id: uuid.UUID
+    intensity: int
+    trigger_category: str
+    outcome: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class TrackingSummary(BaseModel):
     sober_days: int
     total_days: int
@@ -42,3 +61,14 @@ class TrackingSummary(BaseModel):
     total_cravings: int
     top_trigger: str | None
     current_streak: int
+
+
+class StreakResponse(BaseModel):
+    current_streak: int
+
+
+class PaginatedResponse(BaseModel):
+    items: list
+    total: int
+    skip: int
+    limit: int

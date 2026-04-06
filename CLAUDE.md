@@ -88,7 +88,7 @@ src/
 ├── core/                    # Core logic (config, security, crisis detection)
 │   ├── config.py            #   Settings (pydantic-settings, .env)
 │   ├── database.py          #   AsyncEngine, session factory
-│   ├── security.py          #   JWT, bcrypt, AES-256-GCM, refresh tokens
+│   ├── security.py          #   JWT, argon2, AES-256-GCM, refresh tokens
 │   ├── deps.py              #   get_current_user dependency
 │   ├── crisis.py            #   Crisis detection (ZERO DEPS)
 │   ├── crisis_contacts.py   #   Czech crisis phone numbers
@@ -133,13 +133,13 @@ src/
 - Technické termíny: angličtina
 - Kód a komentáře: angličtina
 
-## Stav implementace (Session 4)
-- **134 testů** (131 pass, 3 skip) — unit testy + 31 integration testů (httpx AsyncClient)
+## Stav implementace (Session 5)
+- **135 testů** (135 pass, 0 skip) — unit testy + 31 integration testů (httpx AsyncClient)
 - **6 API routerů** — auth, chat, screening, tracking, crisis, admin
-- **21 endpointů** celkem (20 v routerech + /health)
+- **21 endpointů** celkem (20 v routerech + /health), **všechny s response_model**
 - **9 DB tabulek** — users, conversations, messages, sobriety_checkins, craving_events, screening_results, knowledge_documents, audit_logs, refresh_tokens
-- **Session 4 opravy:** FK cascade/ondelete na všech modelech, audit_log.timestamp odstraněn (redundantní s created_at), date.today() → datetime.now(UTC).date(), ConversationResponse schema fix, register race condition (IntegrityError), RAG graceful degradation, Anthropic IndexError guard, chat crisis separator, streak query limit(365), max_length na login/refresh schemas
-- **Integration testy:** auth flow (register→login→refresh→logout→erasure), tracking CRUD, screening AUDIT, crisis contacts, GDPR export/erasure, security headers, input validation
+- **Session 5 změny:** response modely na všech endpointech, pagination (3 list endpointy), SQL agregace v tracking summary, CheckConstraint na mood/energy_level/intensity, audit logging na chat/tracking/craving, globální exception handler, rate limit na GDPR export, argon2-cffi migrace (bcrypt backward compat)
 - **Auth:** JWT access tokens (1h) + refresh tokens (30d, SHA-256 hashed, rotation)
+- **Password hashing:** argon2-cffi (primary) + passlib/bcrypt (legacy backward compat)
 - **Alembic:** inicializován (async template), env.py nakonfigurován, migrace se generují po připojení k PostgreSQL
 - Frontend: TODO (React Native)

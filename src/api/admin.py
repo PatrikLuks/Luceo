@@ -1,11 +1,13 @@
 """Admin/GDPR endpoints — data export."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.schemas.admin import GDPRExportResponse
 from src.core.database import get_db
 from src.core.deps import get_current_user
+from src.core.rate_limit import limiter
 from src.core.security import decrypt_field
 from src.models.conversation import Conversation, Message
 from src.models.screening import ScreeningResult
@@ -15,8 +17,10 @@ from src.models.user import User
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 
-@router.get("/export-my-data")
+@router.get("/export-my-data", response_model=GDPRExportResponse)
+@limiter.limit("5/minute")
 async def export_my_data(
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

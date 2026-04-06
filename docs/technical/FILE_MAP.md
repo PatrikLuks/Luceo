@@ -53,6 +53,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | `REPORT_2026-04-05.md` | Session 1 report (2026-04-05) — refresh tokens, rate limiting, Alembic |
 | `REPORT_2026-04-05_s3.md` | Session 3 report (2026-04-05) — security audit, test expansion, README |
 | `REPORT_2026-04-06_s4.md` | Session 4 report (2026-04-06) — FK cascades, integration tests, codebase audit |
+| `REPORT_2026-04-06_s5.md` | Session 5 report (2026-04-06) — response models, pagination, SQL aggregation, argon2 |
 
 ## `alembic/` — Database Migrations
 
@@ -66,7 +67,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 |---|---|---|
 | `config.py` | `Settings(BaseSettings)` — reads `.env`, computed `database_url` | pydantic-settings |
 | `database.py` | AsyncEngine, `async_session_maker`, `get_db()` generator | SQLAlchemy, config |
-| `security.py` | JWT create/decode, bcrypt hash/verify, AES-256-GCM encrypt/decrypt | python-jose, passlib, cryptography |
+| `security.py` | JWT create/decode, argon2 hash/verify (bcrypt legacy compat), AES-256-GCM encrypt/decrypt | argon2-cffi, python-jose, passlib (legacy), cryptography |
 | `deps.py` | `get_current_user` FastAPI dependency (Bearer → User) | security, database, models |
 | `crisis.py` | `detect_crisis()`, `CrisisLevel` enum, `get_crisis_response()` | **NONE** (intentionally) |
 | `crisis_contacts.py` | Czech crisis phone numbers (hardcoded Pydantic models) | **NONE** (pydantic only) |
@@ -99,7 +100,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | `anthropic_client.py` | `generate_response()` — thin Claude API wrapper | Returns fallback on error |
 | `rag.py` | `retrieve_context()`, `format_context()` | Keyword fallback for MVP |
 | `screening.py` | `AUDIT_QUESTIONS`, `score_audit()` | WHO AUDIT 10-question tool |
-| `tracking.py` | `get_sobriety_streak()`, `get_tracking_summary()` | Streak calculation, summaries |
+| `tracking.py` | `get_sobriety_streak()`, `get_tracking_summary()` | Streak calculation, SQL-aggregated summaries |
 | `__init__.py` | Package marker | — |
 
 ## `src/api/` — HTTP Endpoints
@@ -120,9 +121,11 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | File | Models |
 |---|---|
 | `auth.py` | `RegisterRequest`, `LoginRequest`, `TokenResponse`, `UserResponse`, `RefreshRequest` |
-| `chat.py` | `SendMessageRequest`, `ChatResponse`, `ConversationResponse` |
-| `screening.py` | `AuditSubmission`, `AuditResultResponse` |
-| `tracking.py` | `CheckinRequest/Response`, `CravingRequest/Response`, `TrackingSummary` |
+| `chat.py` | `SendMessageRequest`, `ChatResponse`, `ConversationResponse`, `ConversationListItem` |
+| `screening.py` | `AuditSubmission`, `AuditResultResponse`, `AuditQuestionsResponse`, `ScreeningResultItem` |
+| `tracking.py` | `CheckinRequest/Response`, `TodayCheckinResponse`, `CravingRequest/Response`, `CravingListItem`, `TrackingSummary`, `StreakResponse` |
+| `admin.py` | `GDPRExportResponse` and nested export models |
+| `crisis.py` | `CrisisContactsResponse` |
 | `__init__.py` | Package marker |
 
 ## `src/main.py` — Application Entry Point

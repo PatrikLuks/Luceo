@@ -3,6 +3,7 @@ from datetime import date
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     ForeignKey,
     Integer,
@@ -30,6 +31,11 @@ class SobrietyCheckin(BaseModel):
 
     __table_args__ = (
         UniqueConstraint("user_id", "date", name="uq_checkin_user_date"),
+        CheckConstraint("mood IS NULL OR (mood >= 1 AND mood <= 5)", name="ck_checkin_mood"),
+        CheckConstraint(
+            "energy_level IS NULL OR (energy_level >= 1 AND energy_level <= 5)",
+            name="ck_checkin_energy_level",
+        ),
     )
 
 
@@ -46,3 +52,7 @@ class CravingEvent(BaseModel):
     trigger_notes_encrypted: Mapped[str | None] = mapped_column(Text)
     coping_strategy_used: Mapped[str | None] = mapped_column(String(200))
     outcome: Mapped[str | None] = mapped_column(String(20))  # resisted, gave_in
+
+    __table_args__ = (
+        CheckConstraint("intensity >= 1 AND intensity <= 10", name="ck_craving_intensity"),
+    )

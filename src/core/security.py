@@ -4,27 +4,40 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.models.refresh_token import RefreshToken
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_ph = PasswordHasher()
 
 # JWT
 ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return _ph.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    # Backward compatibility: bcrypt hashes start with "$2b$" or "$2a$"
+    if hashed.startswith(("$2b$", "$2a$")):
+        try:
+            from passlib.context import CryptContext
+            _legacy = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            return _legacy.verify(plain, hashed)
+        except Exception:
+            return False
+
+    try:
+        return _ph.verify(hashed, plain)
+    except VerifyMismatchError:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:

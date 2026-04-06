@@ -288,8 +288,9 @@ class TestTracking:
         # List
         resp2 = await client.get("/api/v1/tracking/cravings", headers=headers)
         assert resp2.status_code == 200
-        assert len(resp2.json()) == 1
-        assert resp2.json()[0]["trigger_category"] == "stress"
+        items = resp2.json()
+        assert len(items) == 1
+        assert items[0]["trigger_category"] == "stress"
 
     @pytest.mark.asyncio
     async def test_craving_invalid_category(self, client: AsyncClient):

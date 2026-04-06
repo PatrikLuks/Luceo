@@ -24,3 +24,10 @@ class ConversationResponse(BaseModel):
     disclaimer: str
 
     model_config = {"from_attributes": True}
+
+
+class ConversationListItem(BaseModel):
+    id: uuid.UUID
+    started_at: datetime
+
+    model_config = {"from_attributes": True}

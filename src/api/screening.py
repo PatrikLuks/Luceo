@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas.screening import AuditResultResponse, AuditSubmission
+from src.api.schemas.screening import (
+    AuditQuestionsResponse,
+    AuditResultResponse,
+    AuditSubmission,
+    ScreeningResultItem,
+)
 from src.core.audit import log_audit_event
 from src.core.database import get_db
 from src.core.deps import get_current_user
@@ -14,10 +19,10 @@ from src.services.screening import AUDIT_QUESTIONS, score_audit
 router = APIRouter(prefix="/api/v1/screening", tags=["screening"])
 
 
-@router.get("/questionnaires/audit")
+@router.get("/questionnaires/audit", response_model=AuditQuestionsResponse)
 async def get_audit_questions():
     """Return the AUDIT questionnaire structure. No auth required (preview)."""
-    return {"questions": [q.model_dump() for q in AUDIT_QUESTIONS]}
+    return AuditQuestionsResponse(questions=AUDIT_QUESTIONS)
 
 
 @router.post("/questionnaires/audit", response_model=AuditResultResponse)
@@ -63,8 +68,10 @@ async def submit_audit(
     )
 
 
-@router.get("/results")
+@router.get("/results", response_model=list[ScreeningResultItem])
 async def get_screening_results(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -73,16 +80,17 @@ async def get_screening_results(
         select(ScreeningResult)
         .where(ScreeningResult.user_id == user.id)
         .order_by(ScreeningResult.completed_at.desc())
-        .limit(100)
+        .offset(skip)
+        .limit(limit)
     )
     screenings = result.scalars().all()
     return [
-        {
-            "id": str(s.id),
-            "type": s.questionnaire_type,
-            "total_score": s.total_score,
-            "risk_level": s.risk_level,
-            "completed_at": s.completed_at.isoformat() if s.completed_at else None,
-        }
+        ScreeningResultItem(
+            id=s.id,
+            type=s.questionnaire_type,
+            total_score=s.total_score,
+            risk_level=s.risk_level,
+            completed_at=s.completed_at,
+        )
         for s in screenings
     ]

@@ -1,10 +1,16 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas.chat import ChatResponse, ConversationResponse, SendMessageRequest
+from src.api.schemas.chat import (
+    ChatResponse,
+    ConversationListItem,
+    ConversationResponse,
+    SendMessageRequest,
+)
+from src.core.audit import log_audit_event
 from src.core.database import get_db
 from src.core.deps import get_current_user
 from src.core.prompts import AI_DISCLAIMER
@@ -16,14 +22,25 @@ from src.services.chat import process_message
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
 
-@router.post("/conversations", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/conversations",
+    response_model=ConversationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_conversation(
+    request: Request,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new conversation. Returns AI disclaimer (AI Act compliance)."""
     conv = Conversation(user_id=user.id, disclaimer_shown=True)
     db.add(conv)
+
+    await log_audit_event(
+        db, "conversation_created",
+        user_id=user.id,
+        ip_address=request.client.host if request.client else None,
+    )
     await db.commit()
     await db.refresh(conv)
     return ConversationResponse(
@@ -59,8 +76,10 @@ async def send_message(
     return ChatResponse(**response)
 
 
-@router.get("/conversations")
+@router.get("/conversations", response_model=list[ConversationListItem])
 async def list_conversations(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -69,10 +88,7 @@ async def list_conversations(
         select(Conversation)
         .where(Conversation.user_id == user.id)
         .order_by(Conversation.started_at.desc())
-        .limit(50)
+        .offset(skip)
+        .limit(limit)
     )
-    convs = result.scalars().all()
-    return [
-        {"id": str(c.id), "started_at": c.started_at.isoformat()}
-        for c in convs
-    ]
+    return result.scalars().all()
