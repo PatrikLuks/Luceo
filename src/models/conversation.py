@@ -12,7 +12,7 @@ class Conversation(BaseModel):
     __tablename__ = "conversations"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -21,14 +21,19 @@ class Conversation(BaseModel):
     # AI Act compliance: user must know they talk to AI
     disclaimer_shown: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    messages: Mapped[list["Message"]] = relationship(back_populates="conversation")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class Message(BaseModel):
     __tablename__ = "messages"
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("conversations.id"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     role: Mapped[str] = mapped_column(String(20))  # "user", "assistant", "system"
     content_encrypted: Mapped[str] = mapped_column(Text)  # AES-256-GCM encrypted

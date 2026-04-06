@@ -20,6 +20,7 @@ class ChatResponse(BaseModel):
 class ConversationResponse(BaseModel):
     id: uuid.UUID
     started_at: datetime
+    disclaimer_shown: bool
     disclaimer: str
 
     model_config = {"from_attributes": True}

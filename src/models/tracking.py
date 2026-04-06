@@ -20,7 +20,7 @@ class SobrietyCheckin(BaseModel):
     __tablename__ = "sobriety_checkins"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     date: Mapped[date] = mapped_column(Date, nullable=False)
     is_sober: Mapped[bool] = mapped_column(Boolean)
@@ -37,7 +37,7 @@ class CravingEvent(BaseModel):
     __tablename__ = "craving_events"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     intensity: Mapped[int] = mapped_column(Integer)  # 1-10
     trigger_category: Mapped[str] = mapped_column(

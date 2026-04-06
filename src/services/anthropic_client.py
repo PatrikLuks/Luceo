@@ -37,7 +37,7 @@ async def generate_response(
             system=system_prompt,
             messages=messages,
         )
-        text = response.content[0].text
+        text = response.content[0].text if response.content else ""
         tokens = response.usage.input_tokens + response.usage.output_tokens
         return text, tokens
 

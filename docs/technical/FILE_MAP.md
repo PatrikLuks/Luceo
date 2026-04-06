@@ -52,6 +52,7 @@ Complete listing of every file and its purpose. Use this as the entry point when
 |---|---|
 | `REPORT_2026-04-05.md` | Session 1 report (2026-04-05) — refresh tokens, rate limiting, Alembic |
 | `REPORT_2026-04-05_s3.md` | Session 3 report (2026-04-05) — security audit, test expansion, README |
+| `REPORT_2026-04-06_s4.md` | Session 4 report (2026-04-06) — FK cascades, integration tests, codebase audit |
 
 ## `alembic/` — Database Migrations
 
@@ -133,6 +134,7 @@ FastAPI app with CORS middleware, security headers middleware, request logging m
 | File | Coverage |
 |---|---|
 | `conftest.py` | Shared fixtures: async SQLite session, mock Anthropic client, all 9 model imports |
+| `test_integration.py` | 31 tests: full HTTP flows (auth, tracking, screening, crisis, GDPR, chat, security headers) via httpx AsyncClient |
 | `test_crisis.py` | 32 tests: normalize_text, zero-width bypass, CRITICAL/HIGH/MEDIUM/NONE detection, crisis responses |
 | `test_guardrails.py` | 15 tests: diagnostic patterns, medication patterns, diacritics normalization, feminine forms, safe fallback self-check |
 | `test_screening.py` | 13 tests: AUDIT scoring boundary tests, Q9/Q10 validation |

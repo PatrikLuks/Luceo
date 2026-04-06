@@ -29,6 +29,7 @@ async def create_conversation(
     return ConversationResponse(
         id=conv.id,
         started_at=conv.started_at,
+        disclaimer_shown=conv.disclaimer_shown,
         disclaimer=AI_DISCLAIMER,
     )
 

@@ -133,12 +133,13 @@ src/
 - Technické termíny: angličtina
 - Kód a komentáře: angličtina
 
-## Stav implementace (Session 3)
-- **103 testů** — vše prochází (crisis, guardrails, AUDIT, refresh tokens, rate limiting, middleware, AES encryption, JWT, tracking service, config validation)
+## Stav implementace (Session 4)
+- **134 testů** (131 pass, 3 skip) — unit testy + 31 integration testů (httpx AsyncClient)
 - **6 API routerů** — auth, chat, screening, tracking, crisis, admin
 - **21 endpointů** celkem (20 v routerech + /health)
 - **9 DB tabulek** — users, conversations, messages, sobriety_checkins, craving_events, screening_results, knowledge_documents, audit_logs, refresh_tokens
-- **Bezpečnostní audit (Session 3):** guardrails diacritics normalization, timing-safe login, decrypt_field error handling, request.client null-safety, production validation rozšířena (postgres_password, jwt min length), schema max_length, X-XSS-Protection disabled, pool_pre_ping, duplicate crisis contact fix, chat double-message fix, format string injection fix, GDPR export kompletní (encrypted notes)
+- **Session 4 opravy:** FK cascade/ondelete na všech modelech, audit_log.timestamp odstraněn (redundantní s created_at), date.today() → datetime.now(UTC).date(), ConversationResponse schema fix, register race condition (IntegrityError), RAG graceful degradation, Anthropic IndexError guard, chat crisis separator, streak query limit(365), max_length na login/refresh schemas
+- **Integration testy:** auth flow (register→login→refresh→logout→erasure), tracking CRUD, screening AUDIT, crisis contacts, GDPR export/erasure, security headers, input validation
 - **Auth:** JWT access tokens (1h) + refresh tokens (30d, SHA-256 hashed, rotation)
 - **Alembic:** inicializován (async template), env.py nakonfigurován, migrace se generují po připojení k PostgreSQL
 - Frontend: TODO (React Native)

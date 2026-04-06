@@ -93,8 +93,12 @@ async def process_message(
             decrypted = "[encrypted message]"
         messages.append({"role": msg.role, "content": decrypted})
 
-    # 4. RAG: retrieve relevant clinical docs
-    docs = await retrieve_context(content, db)
+    # 4. RAG: retrieve relevant clinical docs (graceful degradation)
+    try:
+        docs = await retrieve_context(content, db)
+    except Exception:
+        logger.warning("RAG retrieval failed, continuing without context")
+        docs = []
     rag_context = format_context(docs)
 
     # 5. Build system prompt (use Template to avoid crashes on { } in RAG content)
@@ -116,11 +120,13 @@ async def process_message(
 
     # 8. Append crisis resources for MEDIUM level
     if crisis_result.level == CrisisLevel.MEDIUM:
-        response_text += get_crisis_response(crisis_result)
+        response_text += "\n\n" + get_crisis_response(crisis_result)
 
     # 9. Determine if disclaimer reminder is needed
     msg_count = len(history_msgs)
-    disclaimer = DISCLAIMER_REMINDER if msg_count > 0 and msg_count % DISCLAIMER_INTERVAL == 0 else None
+    disclaimer = (
+        DISCLAIMER_REMINDER if msg_count > 0 and msg_count % DISCLAIMER_INTERVAL == 0 else None
+    )
 
     # 10. Store assistant message
     assistant_msg = Message(

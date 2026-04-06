@@ -1,7 +1,7 @@
 """Sobriety tracking business logic — streak calculation, summaries."""
 
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,11 +11,12 @@ from src.models.tracking import CravingEvent, SobrietyCheckin
 
 async def get_sobriety_streak(user_id: uuid.UUID, db: AsyncSession) -> int:
     """Count consecutive sober days backward from today."""
-    today = date.today()
+    today = datetime.now(UTC).date()
     result = await db.execute(
         select(SobrietyCheckin)
         .where(SobrietyCheckin.user_id == user_id)
         .order_by(SobrietyCheckin.date.desc())
+        .limit(365)
     )
     checkins = result.scalars().all()
 
@@ -38,7 +39,7 @@ async def get_tracking_summary(
     user_id: uuid.UUID, days: int, db: AsyncSession
 ) -> dict:
     """Get aggregate tracking stats for the last N days."""
-    since = date.today() - timedelta(days=days)
+    since = datetime.now(UTC).date() - timedelta(days=days)
 
     # Sobriety stats
     checkins_result = await db.execute(

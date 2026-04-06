@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
@@ -31,7 +31,7 @@ async def daily_checkin(
     db: AsyncSession = Depends(get_db),
 ):
     """Daily sobriety check-in. Upsert for the same date."""
-    today = date.today()
+    today = datetime.now(UTC).date()
 
     # Upsert: check if already logged today
     result = await db.execute(
@@ -73,7 +73,8 @@ async def get_today_checkin(
     """Get today's check-in status."""
     result = await db.execute(
         select(SobrietyCheckin).where(
-            SobrietyCheckin.user_id == user.id, SobrietyCheckin.date == date.today()
+            SobrietyCheckin.user_id == user.id,
+            SobrietyCheckin.date == datetime.now(UTC).date(),
         )
     )
     checkin = result.scalar_one_or_none()
