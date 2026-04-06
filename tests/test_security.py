@@ -5,9 +5,11 @@ from unittest.mock import patch
 import pytest
 
 from src.core.security import (
+    _DUMMY_HASH,
     create_access_token,
     decode_access_token,
     decrypt_field,
+    dummy_verify,
     encrypt_field,
     hash_password,
     verify_password,
@@ -49,6 +51,18 @@ class TestAESEncryption:
         tampered = encrypted[:30] + ("0" if encrypted[30] != "0" else "1") + encrypted[31:]
         with pytest.raises(ValueError, match="Decryption failed"):
             decrypt_field(tampered)
+
+    def test_aad_context_round_trip(self):
+        """Encrypt and decrypt with the same context succeeds."""
+        ctx = "messages.content_encrypted"
+        encrypted = encrypt_field("secret", context=ctx)
+        assert decrypt_field(encrypted, context=ctx) == "secret"
+
+    def test_aad_context_mismatch_raises(self):
+        """Decrypt with wrong context must fail — prevents cross-field swaps."""
+        encrypted = encrypt_field("secret", context="table.col_a")
+        with pytest.raises(ValueError, match="Decryption failed"):
+            decrypt_field(encrypted, context="table.col_b")
 
 
 class TestPasswordHashing:
@@ -124,3 +138,52 @@ class TestProductionValidation:
             mock.postgres_password = "realpassword"
             with pytest.raises(RuntimeError, match="jwt_secret"):
                 validate_production_settings()
+
+
+class TestDummyVerify:
+    def test_dummy_verify_does_not_raise(self):
+        """dummy_verify should execute without exception regardless of input."""
+        dummy_verify("any-password")
+
+    def test_dummy_verify_with_empty_string(self):
+        """Empty password should not crash."""
+        dummy_verify("")
+
+    def test_dummy_hash_is_precomputed(self):
+        """Module-level _DUMMY_HASH should be an argon2 hash string."""
+        assert _DUMMY_HASH.startswith("$argon2")
+
+
+class TestPromptTemplate:
+    def test_build_system_prompt_substitution(self):
+        """Verify safe substitution prevents injection."""
+        from src.core.prompts import build_system_prompt
+
+        prompt = build_system_prompt(
+            rag_context="CBT technique: deep breathing",
+            user_context="KONTEXT: streak 5",
+        )
+        assert "CBT technique: deep breathing" in prompt
+        assert "KONTEXT: streak 5" in prompt
+
+    def test_build_system_prompt_curly_braces_safe(self):
+        """Content with {user_context} should NOT be further substituted."""
+        from src.core.prompts import build_system_prompt
+
+        prompt = build_system_prompt(
+            rag_context="Text with {user_context} literal",
+            user_context="real context",
+        )
+        # The literal {user_context} from RAG should remain as-is
+        assert "{user_context} literal" in prompt
+        assert "real context" in prompt
+
+    def test_build_system_prompt_dollar_signs_safe(self):
+        """Content with $ should not crash or trigger Template errors."""
+        from src.core.prompts import build_system_prompt
+
+        prompt = build_system_prompt(
+            rag_context="Price: $100",
+            user_context="",
+        )
+        assert "Price: $100" in prompt

@@ -4,11 +4,12 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from jose import JWTError, jwt
-from sqlalchemy import select
+from jwt.exceptions import InvalidTokenError
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -25,6 +26,7 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
+    """Verify a password against a hash (argon2 or legacy bcrypt)."""
     # Backward compatibility: bcrypt hashes start with "$2b$" or "$2a$"
     if hashed.startswith(("$2b$", "$2a$")):
         try:
@@ -40,6 +42,21 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
+_DUMMY_HASH = _ph.hash("dummy-constant-string-luceo")
+
+
+def dummy_verify(password: str) -> None:
+    """Run an argon2 verify against a dummy hash to burn constant time.
+
+    Used in login to prevent timing-based email enumeration.
+    Always raises VerifyMismatchError (caught internally).
+    """
+    try:
+        _ph.verify(_DUMMY_HASH, password)
+    except VerifyMismatchError:
+        pass
+
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + (
@@ -52,7 +69,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 def decode_access_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
-    except JWTError as e:
+    except InvalidTokenError as e:
         raise ValueError("Invalid or expired token") from e
 
 
@@ -99,6 +116,17 @@ async def revoke_refresh_token(token_entry: RefreshToken) -> None:
     token_entry.revoked_at = datetime.now(UTC)
 
 
+async def cleanup_expired_tokens(db: AsyncSession) -> int:
+    """Delete refresh tokens that are expired or revoked. Returns count deleted."""
+    now = datetime.now(UTC)
+    result = await db.execute(
+        delete(RefreshToken).where(
+            (RefreshToken.expires_at <= now) | (RefreshToken.revoked_at.is_not(None))
+        )
+    )
+    return result.rowcount
+
+
 # AES-256-GCM field-level encryption
 def _get_aes_key() -> bytes:
     key_hex = settings.encryption_key
@@ -108,19 +136,27 @@ def _get_aes_key() -> bytes:
     return bytes.fromhex(key_hex[:64])
 
 
-def encrypt_field(plaintext: str) -> str:
-    """Encrypt a string field using AES-256-GCM. Returns hex(nonce + ciphertext)."""
+def encrypt_field(plaintext: str, context: str = "") -> str:
+    """Encrypt a string field using AES-256-GCM. Returns hex(nonce + ciphertext).
+
+    context is passed as Additional Authenticated Data (AAD) to bind the
+    ciphertext to a specific field (e.g. "messages.content_encrypted").
+    Decryption with a different context will fail, preventing cross-field
+    ciphertext swaps.
+    """
     key = _get_aes_key()
     aesgcm = AESGCM(key)
     nonce = os.urandom(12)
-    ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
+    aad = context.encode("utf-8") if context else None
+    ciphertext = aesgcm.encrypt(nonce, plaintext.encode("utf-8"), aad)
     return (nonce + ciphertext).hex()
 
 
-def decrypt_field(encrypted_hex: str) -> str:
+def decrypt_field(encrypted_hex: str, context: str = "") -> str:
     """Decrypt a hex-encoded AES-256-GCM field.
 
-    Raises ValueError on corrupt/invalid data.
+    context must match the AAD used during encryption.
+    Raises ValueError on corrupt/invalid data or AAD mismatch.
     """
     try:
         key = _get_aes_key()
@@ -130,6 +166,7 @@ def decrypt_field(encrypted_hex: str) -> str:
             raise ValueError("Encrypted data too short")
         nonce = raw[:12]
         ciphertext = raw[12:]
-        return aesgcm.decrypt(nonce, ciphertext, None).decode("utf-8")
-    except (ValueError, Exception) as e:
-        raise ValueError(f"Decryption failed: {e}") from e
+        aad = context.encode("utf-8") if context else None
+        return aesgcm.decrypt(nonce, ciphertext, aad).decode("utf-8")
+    except Exception as e:
+        raise ValueError("Decryption failed") from e

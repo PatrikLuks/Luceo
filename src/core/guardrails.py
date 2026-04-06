@@ -5,19 +5,8 @@ in Luceo's output, even if the system prompt was bypassed.
 """
 
 import re
-import unicodedata
 
-# --- Text normalization (mirrors crisis.py approach) ---
-
-
-def _normalize_text(text: str) -> str:
-    """Strip diacritics and normalize whitespace for pattern matching."""
-    # NFKD decomposes characters (e.g., é → e + combining accent)
-    nfkd = unicodedata.normalize("NFKD", text)
-    # Strip combining marks (accents)
-    stripped = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
-    return stripped.lower()
-
+from src.core.text_utils import normalize_text
 
 # Patterns are written WITHOUT diacritics — normalization strips them
 _DIAGNOSTIC_PATTERNS = [
@@ -52,7 +41,7 @@ def check_response_guardrails(response: str) -> tuple[bool, str | None]:
     Returns (is_safe, reason). If not safe, caller should replace
     the offending response with SAFE_FALLBACK.
     """
-    normalized = _normalize_text(response)
+    normalized = normalize_text(response)
 
     for pattern in _COMPILED_DIAGNOSTIC:
         if pattern.search(normalized):

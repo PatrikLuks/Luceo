@@ -1,6 +1,7 @@
 """Unit tests for crisis detection — the most safety-critical module."""
 
-from src.core.crisis import CrisisLevel, detect_crisis, get_crisis_response, normalize_text
+from src.core.crisis import CrisisLevel, detect_crisis, get_crisis_response
+from src.core.text_utils import normalize_text
 
 
 class TestNormalizeText:

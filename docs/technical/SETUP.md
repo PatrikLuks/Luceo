@@ -37,14 +37,20 @@ See `.env.example` for a complete template. Key variables:
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `APP_ENV` | No | `development` | Environment (`development`/`production`). Controls secret validation, OpenAPI docs visibility |
+| `LOG_LEVEL` | No | `info` | Logging level |
 | `POSTGRES_USER` | For DB | `luceo` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | For DB | `changeme` | PostgreSQL password |
 | `POSTGRES_DB` | For DB | `luceo` | Database name |
 | `POSTGRES_HOST` | For DB | `localhost` | Database host |
-| `JWT_SECRET` | Yes (prod) | `changeme-...` | JWT signing secret |
+| `JWT_SECRET` | Yes (prod) | `changeme-...` | JWT signing secret (min 32 chars in prod) |
+| `JWT_EXPIRATION_HOURS` | No | `1` | Access token lifetime |
+| `REFRESH_TOKEN_EXPIRY_DAYS` | No | `30` | Refresh token lifetime |
 | `ANTHROPIC_API_KEY` | For chat | — | Claude API key |
-| `ENCRYPTION_KEY` | For chat | — | 32-byte hex string for AES-256-GCM |
+| `ANTHROPIC_MODEL` | No | `claude-sonnet-4-20250514` | Claude model name |
+| `ENCRYPTION_KEY` | For chat | — | 64-char hex string (32 bytes) for AES-256-GCM |
 | `CORS_ALLOWED_ORIGINS` | For prod | — | Comma-separated allowed origins |
+| `DATA_REGION` | No | `eu-central` | GDPR data region tag |
 
 **Production note:** The server validates critical secrets on startup when `APP_ENV != development`. Deployment with default `changeme` values will fail.
 

@@ -7,11 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.auth import (
     LoginRequest,
+    MessageResponse,
+    PasswordChangeRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
     UserResponse,
 )
+from src.api.utils import get_client_ip
 from src.core.audit import log_audit_event
 from src.core.database import get_db
 from src.core.deps import get_current_user
@@ -19,12 +22,12 @@ from src.core.rate_limit import limiter
 from src.core.security import (
     create_access_token,
     create_refresh_token,
+    dummy_verify,
     hash_password,
     revoke_refresh_token,
     verify_password,
     verify_refresh_token,
 )
-from src.models.audit_log import AuditLog
 from src.models.conversation import Conversation, Message
 from src.models.refresh_token import RefreshToken
 from src.models.screening import ScreeningResult
@@ -36,12 +39,14 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 GDPR_CONSENT_VERSION = "1.0"
 
 
-def _get_client_ip(request: Request) -> str | None:
-    """Safely extract client IP — request.client can be None behind some proxies."""
-    return request.client.host if request.client else None
-
-
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user",
+    description="Create a new account. Email is optional (anonymous accounts supported). "
+    "GDPR consent is required. Returns access + refresh tokens.",
+)
 @limiter.limit("5/minute")
 async def register(
     req: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)
@@ -70,26 +75,31 @@ async def register(
     db.add(user)
 
     try:
-        await db.commit()
+        await db.flush()
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Email already registered."
         )
-    await db.refresh(user)
 
     token = create_access_token({"sub": str(user.id)})
     refresh = await create_refresh_token(user.id, db)
 
     await log_audit_event(
-        db, "user_register", user_id=user.id, ip_address=_get_client_ip(request)
+        db, "user_register", user_id=user.id, ip_address=get_client_ip(request)
     )
     await db.commit()
 
     return TokenResponse(access_token=token, refresh_token=refresh)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Log in",
+    description="Authenticate with email + password. Returns access + refresh tokens. "
+    "Rate limited to 5 attempts/minute.",
+)
 @limiter.limit("5/minute")
 async def login(
     req: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)
@@ -99,9 +109,15 @@ async def login(
     )
     user = result.scalar_one_or_none()
 
-    # Constant-time: always run verify_password to prevent timing-based email enumeration
-    _dummy_hash = "$2b$12$LJ3m4ys3Lg3DEQFIY3Bqxe1111111111111111111111111111111"
-    if not verify_password(req.password, user.password_hash if user else _dummy_hash) or not user:
+    # Constant-time: always run argon2 verify to prevent timing-based email enumeration.
+    # Both paths (user found / not found) execute argon2 hashing with identical cost.
+    if user:
+        password_valid = verify_password(req.password, user.password_hash)
+    else:
+        dummy_verify(req.password)
+        password_valid = False
+
+    if not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials."
         )
@@ -110,19 +126,25 @@ async def login(
     refresh = await create_refresh_token(user.id, db)
 
     await log_audit_event(
-        db, "user_login", user_id=user.id, ip_address=_get_client_ip(request)
+        db, "user_login", user_id=user.id, ip_address=get_client_ip(request)
     )
     await db.commit()
 
     return TokenResponse(access_token=token, refresh_token=refresh)
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse, summary="Get current user")
 async def get_me(user: User = Depends(get_current_user)):
     return user
 
 
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete account (GDPR Art. 17)",
+    description="Right to erasure. Soft-deletes user and wipes all PII. "
+    "Audit logs are preserved anonymized for AI Act compliance.",
+)
 async def delete_me(
     request: Request,
     user: User = Depends(get_current_user),
@@ -141,12 +163,13 @@ async def delete_me(
     await db.execute(delete(ScreeningResult).where(ScreeningResult.user_id == user.id))
     await db.execute(delete(SobrietyCheckin).where(SobrietyCheckin.user_id == user.id))
     await db.execute(delete(CravingEvent).where(CravingEvent.user_id == user.id))
-    await db.execute(delete(AuditLog).where(AuditLog.user_id == user.id))
+    # AuditLog: intentionally NOT deleted — FK SET NULL preserves anonymized
+    # audit trail for AI Act compliance (Art. 12 record-keeping)
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user.id))
 
     # Log the deletion event (will be committed with PII wipe below)
     await log_audit_event(
-        db, "gdpr_deletion", user_id=user.id, ip_address=_get_client_ip(request)
+        db, "gdpr_deletion", user_id=user.id, ip_address=get_client_ip(request)
     )
 
     # Wipe user PII
@@ -158,7 +181,12 @@ async def delete_me(
     await db.commit()
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh tokens",
+    description="Exchange a valid refresh token for new access + refresh token pair (rotation).",
+)
 @limiter.limit("10/minute")
 async def refresh_tokens(
     body: RefreshRequest, request: Request, db: AsyncSession = Depends(get_db)
@@ -182,7 +210,12 @@ async def refresh_tokens(
     return TokenResponse(access_token=new_access, refresh_token=new_refresh)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Log out",
+    description="Revoke a refresh token. Idempotent — already-invalid tokens are silently ignored.",
+)
 async def logout(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     """Revoke a refresh token (logout). Idempotent."""
     try:
@@ -191,3 +224,45 @@ async def logout(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
         await db.commit()
     except ValueError:
         pass  # Token already invalid — idempotent
+
+
+@router.put(
+    "/password",
+    response_model=MessageResponse,
+    summary="Change password",
+    description="Change password. Requires current password. "
+    "Revokes all refresh tokens (forces re-login).",
+)
+@limiter.limit("5/minute")
+async def change_password(
+    body: PasswordChangeRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change password. Requires current password for verification."""
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect.",
+        )
+
+    if body.current_password == body.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must differ from current password.",
+        )
+
+    user.password_hash = hash_password(body.new_password)
+
+    # Revoke all existing refresh tokens (force re-login on other devices)
+    await db.execute(
+        delete(RefreshToken).where(RefreshToken.user_id == user.id)
+    )
+
+    await log_audit_event(
+        db, "password_changed", user_id=user.id, ip_address=get_client_ip(request)
+    )
+    await db.commit()
+
+    return MessageResponse(message="Password changed successfully.")

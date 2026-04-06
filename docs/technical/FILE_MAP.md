@@ -54,6 +54,8 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | `REPORT_2026-04-05_s3.md` | Session 3 report (2026-04-05) — security audit, test expansion, README |
 | `REPORT_2026-04-06_s4.md` | Session 4 report (2026-04-06) — FK cascades, integration tests, codebase audit |
 | `REPORT_2026-04-06_s5.md` | Session 5 report (2026-04-06) — response models, pagination, SQL aggregation, argon2 |
+| `REPORT_2026-04-06_s6.md` | Session 6 report (2026-04-06) — security audit, 36 new tests, 2 new endpoints |
+| `REPORT_2026-04-06_s7.md` | Session 7 report (2026-04-06) — PyJWT migration, OpenAPI docs, token cleanup |
 
 ## `alembic/` — Database Migrations
 
@@ -67,12 +69,13 @@ Complete listing of every file and its purpose. Use this as the entry point when
 |---|---|---|
 | `config.py` | `Settings(BaseSettings)` — reads `.env`, computed `database_url` | pydantic-settings |
 | `database.py` | AsyncEngine, `async_session_maker`, `get_db()` generator | SQLAlchemy, config |
-| `security.py` | JWT create/decode, argon2 hash/verify (bcrypt legacy compat), AES-256-GCM encrypt/decrypt | argon2-cffi, python-jose, passlib (legacy), cryptography |
+| `security.py` | JWT create/decode, argon2 hash/verify (bcrypt legacy compat), AES-256-GCM encrypt/decrypt, token cleanup | PyJWT, argon2-cffi, passlib (legacy), cryptography |
 | `deps.py` | `get_current_user` FastAPI dependency (Bearer → User) | security, database, models |
 | `crisis.py` | `detect_crisis()`, `CrisisLevel` enum, `get_crisis_response()` | **NONE** (intentionally) |
 | `crisis_contacts.py` | Czech crisis phone numbers (hardcoded Pydantic models) | **NONE** (pydantic only) |
 | `guardrails.py` | `check_response_guardrails()` — post-LLM regex checks | **NONE** (re only) |
-| `prompts.py` | System prompt, AI disclaimer, disclaimer reminder | **NONE** |
+| `prompts.py` | System prompt, AI disclaimer, disclaimer reminder, `build_system_prompt()` | **NONE** (string.Template) |
+| `text_utils.py` | `normalize_text()` — shared NFKD normalization for crisis.py + guardrails.py | **NONE** (re, unicodedata only) |
 | `audit.py` | `log_audit_event()` — AI Act / GDPR audit trail | models.audit_log |
 | `rate_limit.py` | Rate limiting key function (JWT/IP extraction) | slowapi |
 | `middleware.py` | `RequestLoggingMiddleware`, `SecurityHeadersMiddleware` | starlette |
@@ -101,26 +104,28 @@ Complete listing of every file and its purpose. Use this as the entry point when
 | `rag.py` | `retrieve_context()`, `format_context()` | Keyword fallback for MVP |
 | `screening.py` | `AUDIT_QUESTIONS`, `score_audit()` | WHO AUDIT 10-question tool |
 | `tracking.py` | `get_sobriety_streak()`, `get_tracking_summary()` | Streak calculation, SQL-aggregated summaries |
+| `user_context.py` | `build_user_context()` — personalized chat context (streak, mood, cravings, AUDIT) | Tracking, screening models |
 | `__init__.py` | Package marker | — |
 
 ## `src/api/` — HTTP Endpoints
 
 | File | Prefix | Auth | Endpoints |
 |---|---|---|---|
-| `auth.py` | `/api/v1/auth` | Mixed | POST /register, POST /login, GET /me, DELETE /me, POST /refresh, POST /logout |
-| `chat.py` | `/api/v1/chat` | Yes | POST /conversations, POST /conversations/{id}/messages, GET /conversations |
+| `auth.py` | `/api/v1/auth` | Mixed | POST /register, POST /login, GET /me, DELETE /me, POST /refresh, POST /logout, PUT /password |
+| `chat.py` | `/api/v1/chat` | Yes | POST /conversations, POST /conversations/{id}/messages, GET /conversations, DELETE /conversations/{id} |
 | `screening.py` | `/api/v1/screening` | Mixed | GET /questionnaires/audit (no auth), POST /questionnaires/audit, GET /results |
 | `tracking.py` | `/api/v1/tracking` | Yes | POST /checkin, GET /checkin/today, POST /cravings, GET /cravings, GET /summary, GET /streak |
 | `crisis.py` | `/api/v1/crisis` | No | GET /contacts |
-| `admin.py` | `/api/v1/admin` | Yes | GET /export-my-data (GDPR Art. 15) |
+| `admin.py` | `/api/v1/admin` | Yes | GET /export-my-data (GDPR Art. 15), POST /cleanup-tokens |
 | `router.py` | — | — | Aggregates all routers into `all_routers` list |
+| `utils.py` | — | — | Shared API utilities (`get_client_ip()`) |
 | `__init__.py` | — | — | Package marker |
 
 ## `src/api/schemas/` — Request/Response Models (Pydantic)
 
 | File | Models |
 |---|---|
-| `auth.py` | `RegisterRequest`, `LoginRequest`, `TokenResponse`, `UserResponse`, `RefreshRequest` |
+| `auth.py` | `RegisterRequest`, `LoginRequest`, `TokenResponse`, `UserResponse`, `RefreshRequest`, `PasswordChangeRequest`, `MessageResponse` |
 | `chat.py` | `SendMessageRequest`, `ChatResponse`, `ConversationResponse`, `ConversationListItem` |
 | `screening.py` | `AuditSubmission`, `AuditResultResponse`, `AuditQuestionsResponse`, `ScreeningResultItem` |
 | `tracking.py` | `CheckinRequest/Response`, `TodayCheckinResponse`, `CravingRequest/Response`, `CravingListItem`, `TrackingSummary`, `StreakResponse` |
@@ -137,13 +142,17 @@ FastAPI app with CORS middleware, security headers middleware, request logging m
 | File | Coverage |
 |---|---|
 | `conftest.py` | Shared fixtures: async SQLite session, mock Anthropic client, all 9 model imports |
-| `test_integration.py` | 31 tests: full HTTP flows (auth, tracking, screening, crisis, GDPR, chat, security headers) via httpx AsyncClient |
+| `test_integration.py` | 59 tests: full HTTP flows (auth, tracking, screening, crisis, GDPR, chat, security headers, IDOR, pagination, password change, conversation delete, token cleanup, OpenAPI docs, GDPR ordering, exception handlers) via httpx AsyncClient |
 | `test_crisis.py` | 32 tests: normalize_text, zero-width bypass, CRITICAL/HIGH/MEDIUM/NONE detection, crisis responses |
 | `test_guardrails.py` | 15 tests: diagnostic patterns, medication patterns, diacritics normalization, feminine forms, safe fallback self-check |
 | `test_screening.py` | 13 tests: AUDIT scoring boundary tests, Q9/Q10 validation |
 | `test_auth.py` | 7 tests: refresh token create, verify, expire, revoke, rotation, hash |
 | `test_rate_limit.py` | 3 tests: JWT key extraction, IP fallback, invalid JWT |
 | `test_middleware.py` | 7 tests: CSP, HSTS prod/dev, Permissions-Policy, X-XSS-Protection, Referrer-Policy, basic headers |
-| `test_security.py` | 13 tests: AES-256-GCM round-trip, corrupt data, JWT create/decode, password hashing, production config validation |
+| `test_security.py` | 19 tests: AES-256-GCM round-trip, corrupt data, AAD context, JWT create/decode (PyJWT), password hashing, production config validation, dummy_verify (pre-computed hash), prompt template safety |
 | `test_tracking_service.py` | 10 tests: sobriety streak (consecutive, gaps, breaks), tracking summary (empty, with data, top trigger) |
+| `test_user_context.py` | 7 tests: build_user_context with streak, mood, cravings, AUDIT score |
+| `test_rag.py` | 8 tests: retrieve_context keyword matching, LIKE escaping, fallback, format_context |
+| `test_anthropic_client.py` | 4 tests: API call success, error fallback, empty content, configurable model |
+| `test_chat_service.py` | 5 tests: process_message normal flow, guardrail trigger, crisis levels, disclaimer interval |
 | `__init__.py` | Package marker |

@@ -10,14 +10,14 @@ All crisis responses are predefined — NO AI improvisation during crisis.
 
 import enum
 import re
-import unicodedata
 
 from pydantic import BaseModel
 
 from src.core.crisis_contacts import CZECH_CRISIS_CONTACTS, CrisisContact
+from src.core.text_utils import normalize_text
 
 
-class CrisisLevel(str, enum.Enum):
+class CrisisLevel(enum.StrEnum):
     NONE = "none"
     MEDIUM = "medium"
     HIGH = "high"
@@ -29,15 +29,6 @@ class CrisisResult(BaseModel):
     matched_keywords: list[str]
     recommended_action: str
     crisis_contacts: list[CrisisContact]
-
-
-def normalize_text(text: str) -> str:
-    """Strip diacritics, zero-width characters, lowercase, collapse whitespace."""
-    # Remove zero-width and invisible characters that could bypass keyword matching
-    text = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\ufeff\u00ad\u2060\u180e]", "", text)
-    nfkd = unicodedata.normalize("NFKD", text)
-    ascii_text = "".join(c for c in nfkd if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", ascii_text.lower().strip())
 
 
 # --- Keyword tiers (Czech-first, normalized/no-diacritics form) ---

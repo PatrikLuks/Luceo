@@ -49,7 +49,7 @@ User message
 | **NONE** | Normal conversation | Normal LLM response. |
 
 ### Diacritics Handling
-Czech text is normalized (NFD decomposition, combining chars stripped) so that "chci zemřít" and "chci zemrit" both trigger detection.
+Czech text is normalized (NFKD decomposition via `src/core/text_utils.py`, combining chars stripped) so that "chci zemřít" and "chci zemrit" both trigger detection. The normalization also strips zero-width characters to prevent bypass attempts.
 
 ### Crisis Contacts (`src/core/crisis_contacts.py`)
 Hardcoded Czech crisis numbers:
@@ -79,6 +79,8 @@ _CRITICAL_PATTERNS = [
 
 ## Layer 2: System Prompt (`src/core/prompts.py`)
 
+The system prompt is built via `build_system_prompt()` using `string.Template.safe_substitute()` to prevent prompt injection through RAG context or user data.
+
 The system prompt instructs Claude to:
 1. Never diagnose ("máš závislost", "jsi alkoholik")
 2. Never recommend specific medications or dosages
@@ -86,6 +88,8 @@ The system prompt instructs Claude to:
 4. Use empathetic, non-stigmatizing language
 5. Stay within provided RAG context
 6. Respond in Czech unless user writes in English
+7. Respect the disclaimer reminder interval
+8. Use personalized user context (streak, mood, cravings, AUDIT)
 
 The system prompt is a **constant in code** (not stored in DB) so that changes go through version control and code review.
 
@@ -121,11 +125,13 @@ The triggering event is logged with the reason for audit trail.
 ## Test Coverage
 
 - `tests/test_crisis.py` — 32 tests covering all crisis levels, diacritics normalization, zero-width char bypass, edge cases
-- `tests/test_guardrails.py` — 7 tests covering diagnostic and medication pattern detection
+- `tests/test_guardrails.py` — 15 tests covering diagnostic and medication pattern detection, diacritics normalization, feminine forms
+- `tests/test_security.py` — 19 tests covering AES-GCM, AAD, JWT, password hashing, prompt template safety
 - `tests/test_auth.py` — 7 tests covering refresh token lifecycle
 - `tests/test_rate_limit.py` — 3 tests covering rate limit key extraction
-- `tests/test_middleware.py` — 5 tests covering security headers (CSP, HSTS, Permissions-Policy)
+- `tests/test_middleware.py` — 7 tests covering security headers (CSP, HSTS, Permissions-Policy)
 - `tests/test_screening.py` — 13 tests covering AUDIT scoring boundaries and Q9/Q10 validation
+- `tests/test_chat_service.py` — 5 tests covering guardrail triggering, crisis levels, disclaimer interval
 
 ## Future Work
 - ML-based crisis detection (complementing, not replacing, keyword matching)

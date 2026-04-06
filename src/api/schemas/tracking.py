@@ -65,10 +65,3 @@ class TrackingSummary(BaseModel):
 
 class StreakResponse(BaseModel):
     current_streak: int
-
-
-class PaginatedResponse(BaseModel):
-    items: list
-    total: int
-    skip: int
-    limit: int

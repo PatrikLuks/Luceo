@@ -22,11 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.audit import log_audit_event
 from src.core.crisis import CrisisLevel, detect_crisis, get_crisis_response
 from src.core.guardrails import SAFE_FALLBACK, check_response_guardrails
-from src.core.prompts import DISCLAIMER_REMINDER, LUCEO_SYSTEM_PROMPT
+from src.core.prompts import DISCLAIMER_REMINDER, build_system_prompt
 from src.core.security import decrypt_field, encrypt_field
 from src.models.conversation import Message
 from src.services.anthropic_client import generate_response
 from src.services.rag import format_context, retrieve_context
+from src.services.user_context import build_user_context
 
 logger = logging.getLogger("luceo.chat")
 
@@ -51,7 +52,7 @@ async def process_message(
     user_msg = Message(
         conversation_id=conversation_id,
         role="user",
-        content_encrypted=encrypt_field(content),
+        content_encrypted=encrypt_field(content, "messages.content_encrypted"),
         crisis_level=crisis_result.level.value,
     )
     db.add(user_msg)
@@ -62,7 +63,7 @@ async def process_message(
         assistant_msg = Message(
             conversation_id=conversation_id,
             role="assistant",
-            content_encrypted=encrypt_field(response_text),
+            content_encrypted=encrypt_field(response_text, "messages.content_encrypted"),
             crisis_level=crisis_result.level.value,
         )
         db.add(assistant_msg)
@@ -88,8 +89,9 @@ async def process_message(
     messages = []
     for msg in history_msgs:
         try:
-            decrypted = decrypt_field(msg.content_encrypted)
+            decrypted = decrypt_field(msg.content_encrypted, "messages.content_encrypted")
         except Exception:
+            logger.warning("Failed to decrypt message %s", msg.id)
             decrypted = "[encrypted message]"
         messages.append({"role": msg.role, "content": decrypted})
 
@@ -101,13 +103,9 @@ async def process_message(
         docs = []
     rag_context = format_context(docs)
 
-    # 5. Build system prompt (use Template to avoid crashes on { } in RAG content)
-    user_context = ""  # TODO: inject sobriety streak, mood data
-    system_prompt = LUCEO_SYSTEM_PROMPT.replace(
-        "{rag_context}", rag_context
-    ).replace(
-        "{user_context}", user_context
-    )
+    # 5. Build system prompt (safe_substitute prevents injection via RAG/user content)
+    user_context = await build_user_context(user_id, db)
+    system_prompt = build_system_prompt(rag_context, user_context)
 
     # 6. Call Claude API
     response_text, token_count = await generate_response(system_prompt, messages)
@@ -132,7 +130,7 @@ async def process_message(
     assistant_msg = Message(
         conversation_id=conversation_id,
         role="assistant",
-        content_encrypted=encrypt_field(response_text),
+        content_encrypted=encrypt_field(response_text, "messages.content_encrypted"),
         crisis_level=crisis_result.level.value,
         token_count=token_count,
     )

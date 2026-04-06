@@ -50,11 +50,12 @@ Luceo is an AI-powered addiction recovery support platform. The MVP backend is a
 ### Core Layer (`src/core/`)
 - **config.py** — Settings via pydantic-settings, reads `.env`
 - **database.py** — AsyncEngine, session factory, `get_db()` dependency
-- **security.py** — JWT (HS256), bcrypt, AES-256-GCM, refresh tokens
+- **security.py** — JWT (PyJWT, HS256), argon2 (+ legacy bcrypt), AES-256-GCM with AAD, refresh tokens
 - **crisis.py** — Crisis detection (keyword matching, no dependencies)
 - **crisis_contacts.py** — Czech crisis phone numbers (hardcoded)
 - **guardrails.py** — Post-LLM output filtering (diagnoses, medications)
-- **prompts.py** — System prompt, AI disclaimer
+- **prompts.py** — System prompt, AI disclaimer, `build_system_prompt()` (safe_substitute)
+- **text_utils.py** — Shared NFKD normalization (zero deps, used by crisis.py + guardrails.py)
 - **deps.py** — `get_current_user` FastAPI dependency
 - **audit.py** — Audit trail logging (AI Act compliance)
 - **rate_limit.py** — Rate limiting with JWT/IP key extraction (slowapi)
@@ -66,6 +67,7 @@ Luceo is an AI-powered addiction recovery support platform. The MVP backend is a
 - **rag.py** — Knowledge base retrieval (keyword fallback for MVP)
 - **screening.py** — WHO AUDIT questionnaire scoring
 - **tracking.py** — Sobriety streak calculation, summaries
+- **user_context.py** — Build personalized user context (streak, mood, cravings, AUDIT) for chat
 
 ### Models Layer (`src/models/`)
 - SQLAlchemy 2.0 ORM models with UUID primary keys
@@ -116,12 +118,12 @@ User message
 |---|---|---|
 | Transport | HTTPS (infrastructure) | Encryption in transit |
 | Authentication | JWT HS256 (1h) + refresh tokens (30d, SHA-256) | User identity |
-| Data at rest | AES-256-GCM per-field | GDPR encryption |
+| Data at rest | AES-256-GCM per-field with AAD | GDPR encryption, cross-field swap prevention |
 | Crisis detection | Keyword matching pre-LLM | Immediate safety |
 | Output guardrails | Regex post-LLM | Prevent diagnoses/medications |
 | Audit trail | AuditLog model | AI Act compliance |
 | IP logging | SHA-256 hash only | GDPR — no raw IPs |
-| User deletion | Soft delete + PII wipe | GDPR Art. 17 |
+| User deletion | Soft delete + PII wipe (audit logs preserved) | GDPR Art. 17 + AI Act |
 | CORS | Middleware (configure per env) | Cross-origin protection |
 | Headers | X-Content-Type-Options, X-Frame-Options | XSS/clickjacking |
 | Rate limiting | slowapi (JWT/IP key, per-endpoint) | Abuse prevention |
@@ -137,6 +139,6 @@ User message
 | Guardrails | 2 layers (prompt + post-LLM) | Belt and suspenders |
 | Email | Optional (nullable) | Anonymity per Karel persona |
 | User deletion | Soft delete + PII wipe | Audit trail + GDPR Art. 17 |
-| System prompt | Constant in code | Version controlled |
+| System prompt | string.Template with safe_substitute | Version controlled, injection-safe |
 | Chat protocol | Request-response | Sufficient for MVP |
 | Embedding model | Deferred (keyword fallback) | MVP without embedding infra |

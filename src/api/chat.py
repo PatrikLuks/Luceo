@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.chat import (
@@ -10,12 +10,13 @@ from src.api.schemas.chat import (
     ConversationResponse,
     SendMessageRequest,
 )
+from src.api.utils import get_client_ip
 from src.core.audit import log_audit_event
 from src.core.database import get_db
 from src.core.deps import get_current_user
 from src.core.prompts import AI_DISCLAIMER
 from src.core.rate_limit import limiter
-from src.models.conversation import Conversation
+from src.models.conversation import Conversation, Message
 from src.models.user import User
 from src.services.chat import process_message
 
@@ -26,6 +27,8 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
     "/conversations",
     response_model=ConversationResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Create a conversation",
+    description="Start a new conversation. Returns AI disclaimer (AI Act compliance).",
 )
 async def create_conversation(
     request: Request,
@@ -39,7 +42,7 @@ async def create_conversation(
     await log_audit_event(
         db, "conversation_created",
         user_id=user.id,
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_client_ip(request),
     )
     await db.commit()
     await db.refresh(conv)
@@ -51,7 +54,13 @@ async def create_conversation(
     )
 
 
-@router.post("/conversations/{conversation_id}/messages", response_model=ChatResponse)
+@router.post(
+    "/conversations/{conversation_id}/messages",
+    response_model=ChatResponse,
+    summary="Send a message",
+    description="Send a message and get AI response. Crisis detection runs before LLM. "
+    "Rate limited to 20 messages/minute.",
+)
 @limiter.limit("20/minute")
 async def send_message(
     conversation_id: uuid.UUID,
@@ -76,7 +85,12 @@ async def send_message(
     return ChatResponse(**response)
 
 
-@router.get("/conversations", response_model=list[ConversationListItem])
+@router.get(
+    "/conversations",
+    response_model=list[ConversationListItem],
+    summary="List conversations",
+    description="List user's conversations with pagination (skip/limit).",
+)
 async def list_conversations(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -92,3 +106,47 @@ async def list_conversations(
         .limit(limit)
     )
     return result.scalars().all()
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a conversation",
+    description="Delete a conversation and all its messages. Audit logged.",
+)
+@limiter.limit("20/minute")
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a conversation and all its messages. Audit logged."""
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found",
+        )
+
+    # Delete messages first (FK), then conversation
+    await db.execute(
+        delete(Message).where(Message.conversation_id == conversation_id)
+    )
+    await db.delete(conv)
+
+    await log_audit_event(
+        db, "conversation_deleted",
+        user_id=user.id,
+        details={"conversation_id": str(conversation_id)},
+        ip_address=get_client_ip(request),
+    )
+    await db.commit()
+
+

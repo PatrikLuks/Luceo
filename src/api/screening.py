@@ -8,6 +8,7 @@ from src.api.schemas.screening import (
     AuditSubmission,
     ScreeningResultItem,
 )
+from src.api.utils import get_client_ip
 from src.core.audit import log_audit_event
 from src.core.database import get_db
 from src.core.deps import get_current_user
@@ -19,13 +20,23 @@ from src.services.screening import AUDIT_QUESTIONS, score_audit
 router = APIRouter(prefix="/api/v1/screening", tags=["screening"])
 
 
-@router.get("/questionnaires/audit", response_model=AuditQuestionsResponse)
+@router.get(
+    "/questionnaires/audit",
+    response_model=AuditQuestionsResponse,
+    summary="Get AUDIT questionnaire",
+    description="Return the WHO AUDIT questionnaire structure. No auth required.",
+)
 async def get_audit_questions():
     """Return the AUDIT questionnaire structure. No auth required (preview)."""
     return AuditQuestionsResponse(questions=AUDIT_QUESTIONS)
 
 
-@router.post("/questionnaires/audit", response_model=AuditResultResponse)
+@router.post(
+    "/questionnaires/audit",
+    response_model=AuditResultResponse,
+    summary="Submit AUDIT answers",
+    description="Submit 10 AUDIT answers and receive risk assessment with Czech recommendation.",
+)
 @limiter.limit("60/minute")
 async def submit_audit(
     body: AuditSubmission,
@@ -57,7 +68,7 @@ async def submit_audit(
         db, "audit_completed",
         user_id=user.id,
         details={"total_score": result.total_score, "risk_level": result.risk_level},
-        ip_address=request.client.host if request.client else None,
+        ip_address=get_client_ip(request),
     )
     await db.commit()
 
@@ -68,7 +79,11 @@ async def submit_audit(
     )
 
 
-@router.get("/results", response_model=list[ScreeningResultItem])
+@router.get(
+    "/results",
+    response_model=list[ScreeningResultItem],
+    summary="Get screening history",
+)
 async def get_screening_results(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),

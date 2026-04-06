@@ -80,6 +80,8 @@ Primární zaměření MVP: **alkoholismus** v ČR. Globální ambice.
 | Soubor | Účel |
 |---|---|
 | `docs/reports/REPORT_2026-04-05.md` | Session 1 report — refresh tokens, rate limiting, Alembic, security |
+| `docs/reports/REPORT_2026-04-06_s6.md` | Session 6 report — security audit, 36 new tests, 2 new endpoints |
+| `docs/reports/REPORT_2026-04-06_s7.md` | Session 7 report — PyJWT migrace, OpenAPI docs, token cleanup |
 
 ## Backend architektura (src/)
 ```
@@ -88,12 +90,13 @@ src/
 ├── core/                    # Core logic (config, security, crisis detection)
 │   ├── config.py            #   Settings (pydantic-settings, .env)
 │   ├── database.py          #   AsyncEngine, session factory
-│   ├── security.py          #   JWT, argon2, AES-256-GCM, refresh tokens
+│   ├── security.py          #   JWT (PyJWT), argon2, AES-256-GCM, refresh tokens
 │   ├── deps.py              #   get_current_user dependency
 │   ├── crisis.py            #   Crisis detection (ZERO DEPS)
 │   ├── crisis_contacts.py   #   Czech crisis phone numbers
 │   ├── guardrails.py        #   Post-LLM output filter
-│   ├── prompts.py           #   System prompt, disclaimers
+│   ├── prompts.py           #   System prompt, disclaimers, build_system_prompt()
+│   ├── text_utils.py        #   Shared text normalization (zero deps)
 │   ├── audit.py             #   Audit trail logging
 │   ├── rate_limit.py        #   Rate limiting (slowapi)
 │   └── middleware.py         #   Request logging, security headers (CSP, HSTS)
@@ -111,7 +114,8 @@ src/
 │   ├── anthropic_client.py  #   Claude API wrapper
 │   ├── rag.py               #   Knowledge base retrieval
 │   ├── screening.py         #   WHO AUDIT scoring
-│   └── tracking.py          #   Streak calculation, summaries
+│   ├── tracking.py          #   Streak calculation, summaries
+│   └── user_context.py      #   Build user context for chat personalization
 └── api/                     # HTTP endpoints
     ├── router.py             #   All routers aggregated
     ├── auth.py               #   /api/v1/auth/*
@@ -133,13 +137,18 @@ src/
 - Technické termíny: angličtina
 - Kód a komentáře: angličtina
 
-## Stav implementace (Session 5)
-- **135 testů** (135 pass, 0 skip) — unit testy + 31 integration testů (httpx AsyncClient)
+## Stav implementace (Session 8)
+- **195 testů** (195 pass, 0 skip) — unit testy + 59 integration testů (httpx AsyncClient)
+- **0 ruff warnings**
 - **6 API routerů** — auth, chat, screening, tracking, crisis, admin
-- **21 endpointů** celkem (20 v routerech + /health), **všechny s response_model**
+- **24 endpointů** celkem (23 v routerech + /health), **všechny s response_model a OpenAPI summary**
 - **9 DB tabulek** — users, conversations, messages, sobriety_checkins, craving_events, screening_results, knowledge_documents, audit_logs, refresh_tokens
-- **Session 5 změny:** response modely na všech endpointech, pagination (3 list endpointy), SQL agregace v tracking summary, CheckConstraint na mood/energy_level/intensity, audit logging na chat/tracking/craving, globální exception handler, rate limit na GDPR export, argon2-cffi migrace (bcrypt backward compat)
-- **Auth:** JWT access tokens (1h) + refresh tokens (30d, SHA-256 hashed, rotation)
+- **~3,158 řádků src/**, **~2,513 řádků tests/**
+- **Session 8 změny:** dead code odstranění (PaginatedResponse), deterministické řazení GDPR exportu, konfigurovatelný Claude model, sdílený `get_client_ip()` helper, 21 nových testů (RAG, Anthropic client, chat process_message, GDPR ordering, exception handlers), kompletní aktualizace technické dokumentace
+- **Auth:** JWT access tokens (1h, PyJWT) + refresh tokens (30d, SHA-256 hashed, rotation)
 - **Password hashing:** argon2-cffi (primary) + passlib/bcrypt (legacy backward compat)
+- **Encryption:** AES-256-GCM s AAD context binding (prevence cross-field swaps)
+- **Prompt safety:** `string.Template.safe_substitute()` (prevence injection přes RAG/user context)
+- **OpenAPI:** docs_url/redoc_url skryté v produkci, summary na všech endpointech
 - **Alembic:** inicializován (async template), env.py nakonfigurován, migrace se generují po připojení k PostgreSQL
 - Frontend: TODO (React Native)

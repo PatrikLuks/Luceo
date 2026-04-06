@@ -32,7 +32,7 @@ async def generate_response(
 
     try:
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=settings.anthropic_model,
             max_tokens=max_tokens,
             system=system_prompt,
             messages=messages,

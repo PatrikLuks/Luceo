@@ -21,6 +21,9 @@ All endpoints are rate-limited. Limits apply per user (JWT) or per IP (unauthent
 | `POST /auth/register`, `/login` | 5/minute |
 | `POST /auth/refresh` | 10/minute |
 | `POST /chat/.../messages` | 20/minute |
+| `PUT /auth/password` | 5/minute |
+| `DELETE /chat/.../conversations` | 20/minute |
+| `POST /admin/cleanup-tokens` | 1/minute |
 | Tracking, screening write endpoints | 60/minute |
 
 Exceeding returns `429 Too Many Requests`.
@@ -114,6 +117,27 @@ GDPR Article 17 — right to erasure. Soft-deletes user and wipes PII.
 **Auth:** Required
 **Response:** 204 No Content
 
+### PUT /password
+Change password. Requires current password. Revokes all refresh tokens (forces re-login).
+
+**Auth:** Required
+**Body:**
+```json
+{
+  "current_password": "oldpassword",
+  "new_password": "newpassword8+"
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Password changed successfully."
+}
+```
+
+**Errors:** 401 (wrong current password), 400 (same password)
+
 ---
 
 ## Chat (`/api/v1/chat`)
@@ -165,15 +189,23 @@ Send a message and get AI response.
 ```
 
 ### GET /conversations
-List user's conversations (most recent first, limit 50).
+List user's conversations (most recent first). Supports pagination.
 
 **Auth:** Required
+**Query:** `?skip=0&limit=50`
 **Response (200):**
 ```json
 [
   {"id": "uuid", "started_at": "2026-04-05T10:00:00Z"}
 ]
 ```
+
+### DELETE /conversations/{conversation_id}
+Delete a conversation and all its messages. Audit logged.
+
+**Auth:** Required
+**Response:** 204 No Content
+**Errors:** 404 (not found or not owned)
 
 ---
 
@@ -334,7 +366,20 @@ Public endpoint — no auth. Returns Czech crisis phone numbers.
 GDPR Article 15 — right of access. Exports all user data as JSON.
 
 **Auth:** Required
-**Response:** Full JSON export of user profile, checkins, cravings, screenings, conversations (decrypted).
+**Rate limit:** 5/minute
+**Response:** Full JSON export of user profile, checkins, cravings, screenings, conversations (decrypted). Data is ordered chronologically.
+
+### POST /cleanup-tokens
+Remove expired and revoked refresh tokens from the database.
+
+**Auth:** Required
+**Rate limit:** 1/minute
+**Response (200):**
+```json
+{
+  "message": "Cleaned up 5 expired/revoked tokens."
+}
+```
 
 ---
 
@@ -342,4 +387,13 @@ GDPR Article 15 — right of access. Exports all user data as JSON.
 
 ### GET /health
 **Auth:** None
-**Response:** `{"status": "ok", "version": "0.1.0"}`
+**Response:**
+```json
+{
+  "status": "ok",
+  "version": "0.2.0",
+  "database": "connected"
+}
+```
+
+Status is `"degraded"` and database `"unavailable"` when DB is unreachable.

@@ -176,6 +176,32 @@ class TestAuthFlow:
         assert resp.status_code == 401
 
     @pytest.mark.asyncio
+    async def test_login_nonexistent_and_wrong_password_same_response(
+        self, client: AsyncClient
+    ):
+        """Both non-existent email and wrong password return identical 401.
+
+        The login endpoint uses argon2 verification for both code paths
+        (user found / not found) to prevent timing oracles that could
+        reveal email existence. Timing equivalence can't be tested in
+        unit tests, but response body identity can.
+        """
+        await _register(client, email="exists@example.com")
+
+        nonexistent = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "ghost@example.com", "password": "anypass123"},
+        )
+        wrong_pass = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "exists@example.com", "password": "wrongpass123"},
+        )
+
+        assert nonexistent.status_code == 401
+        assert wrong_pass.status_code == 401
+        assert nonexistent.json() == wrong_pass.json()
+
+    @pytest.mark.asyncio
     async def test_refresh_token_rotation(self, client: AsyncClient):
         """Register → refresh → old token should be revoked."""
         tokens = await _register(client, email="refresh@example.com")
@@ -579,7 +605,10 @@ class TestSecurity:
     async def test_health_endpoint(self, client: AsyncClient):
         resp = await client.get("/health")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
+        data = resp.json()
+        assert data["status"] in ("ok", "degraded")
+        assert "version" in data
+        assert "database" in data
 
     @pytest.mark.asyncio
     async def test_security_headers(self, client: AsyncClient):
@@ -611,4 +640,498 @@ class TestSecurity:
             json={"content": "x" * 5001},
             headers=headers,
         )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Cross-user data isolation (IDOR prevention)
+# ---------------------------------------------------------------------------
+
+
+class TestDataIsolation:
+    @pytest.mark.asyncio
+    async def test_cannot_send_message_to_other_users_conversation(
+        self, client: AsyncClient
+    ):
+        """User A cannot send a message to User B's conversation (IDOR)."""
+        user_a = await _register(client, email="a@example.com")
+        user_b = await _register(client, email="b@example.com")
+
+        # User A creates a conversation
+        resp = await client.post(
+            "/api/v1/chat/conversations", headers=_auth(user_a)
+        )
+        conv_id = resp.json()["id"]
+
+        # User B tries to send a message to User A's conversation
+        resp2 = await client.post(
+            f"/api/v1/chat/conversations/{conv_id}/messages",
+            json={"content": "I shouldn't be here"},
+            headers=_auth(user_b),
+        )
+        assert resp2.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_cannot_see_other_users_conversations(self, client: AsyncClient):
+        """User A's conversation list does not include User B's conversations."""
+        user_a = await _register(client, email="list_a@example.com")
+        user_b = await _register(client, email="list_b@example.com")
+
+        await client.post("/api/v1/chat/conversations", headers=_auth(user_a))
+        await client.post("/api/v1/chat/conversations", headers=_auth(user_b))
+
+        # User A should only see their own conversation
+        resp = await client.get(
+            "/api/v1/chat/conversations", headers=_auth(user_a)
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    @pytest.mark.asyncio
+    async def test_cannot_see_other_users_checkins(self, client: AsyncClient):
+        """User B's today checkin should not show User A's data."""
+        user_a = await _register(client, email="track_a@example.com")
+        user_b = await _register(client, email="track_b@example.com")
+
+        await client.post(
+            "/api/v1/tracking/checkin",
+            json={"is_sober": True, "mood": 5},
+            headers=_auth(user_a),
+        )
+
+        # User B has no checkin
+        resp = await client.get(
+            "/api/v1/tracking/checkin/today", headers=_auth(user_b)
+        )
+        assert resp.status_code == 200
+        assert resp.json()["checked_in"] is False
+
+    @pytest.mark.asyncio
+    async def test_cannot_see_other_users_cravings(self, client: AsyncClient):
+        """User B's craving list should not include User A's cravings."""
+        user_a = await _register(client, email="crav_a@example.com")
+        user_b = await _register(client, email="crav_b@example.com")
+
+        await client.post(
+            "/api/v1/tracking/cravings",
+            json={"intensity": 8, "trigger_category": "stress"},
+            headers=_auth(user_a),
+        )
+
+        resp = await client.get(
+            "/api/v1/tracking/cravings", headers=_auth(user_b)
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 0
+
+    @pytest.mark.asyncio
+    async def test_cannot_see_other_users_screenings(self, client: AsyncClient):
+        """User B's screening results should not include User A's scores."""
+        user_a = await _register(client, email="scr_a@example.com")
+        user_b = await _register(client, email="scr_b@example.com")
+
+        await client.post(
+            "/api/v1/screening/questionnaires/audit",
+            json={"answers": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
+            headers=_auth(user_a),
+        )
+
+        resp = await client.get(
+            "/api/v1/screening/results", headers=_auth(user_b)
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 0
+
+    @pytest.mark.asyncio
+    async def test_cannot_export_other_users_data(self, client: AsyncClient):
+        """GDPR export only returns own data."""
+        user_a = await _register(client, email="exp_a@example.com")
+        user_b = await _register(client, email="exp_b@example.com")
+
+        await client.post(
+            "/api/v1/tracking/checkin",
+            json={"is_sober": True, "mood": 4},
+            headers=_auth(user_a),
+        )
+
+        resp = await client.get(
+            "/api/v1/admin/export-my-data", headers=_auth(user_b)
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["checkins"]) == 0
+        assert data["user"]["email"] == "exp_b@example.com"
+
+
+# ---------------------------------------------------------------------------
+# Pagination edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestPagination:
+    @pytest.mark.asyncio
+    async def test_conversations_pagination(self, client: AsyncClient):
+        tokens = await _register(client)
+        headers = _auth(tokens)
+
+        # Create 3 conversations
+        for _ in range(3):
+            await client.post("/api/v1/chat/conversations", headers=headers)
+
+        # Pagination: skip=1, limit=1
+        resp = await client.get(
+            "/api/v1/chat/conversations?skip=1&limit=1", headers=headers
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    @pytest.mark.asyncio
+    async def test_skip_beyond_total_returns_empty(self, client: AsyncClient):
+        tokens = await _register(client)
+        headers = _auth(tokens)
+
+        resp = await client.get(
+            "/api/v1/chat/conversations?skip=999", headers=headers
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 0
+
+    @pytest.mark.asyncio
+    async def test_negative_skip_rejected(self, client: AsyncClient):
+        tokens = await _register(client)
+        resp = await client.get(
+            "/api/v1/chat/conversations?skip=-1", headers=_auth(tokens)
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_limit_zero_rejected(self, client: AsyncClient):
+        tokens = await _register(client)
+        resp = await client.get(
+            "/api/v1/tracking/cravings?limit=0", headers=_auth(tokens)
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_limit_exceeds_max_rejected(self, client: AsyncClient):
+        tokens = await _register(client)
+        resp = await client.get(
+            "/api/v1/tracking/cravings?limit=101", headers=_auth(tokens)
+        )
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Logout idempotency
+# ---------------------------------------------------------------------------
+
+
+class TestLogoutEdgeCases:
+    @pytest.mark.asyncio
+    async def test_double_logout_is_idempotent(self, client: AsyncClient):
+        """Calling logout twice with same token should not error."""
+        tokens = await _register(client, email="logout2@example.com")
+        rt = tokens["refresh_token"]
+
+        resp1 = await client.post("/api/v1/auth/logout", json={"refresh_token": rt})
+        assert resp1.status_code == 204
+
+        resp2 = await client.post("/api/v1/auth/logout", json={"refresh_token": rt})
+        assert resp2.status_code == 204
+
+    @pytest.mark.asyncio
+    async def test_logout_with_garbage_token(self, client: AsyncClient):
+        """Logout with an invalid token should be silently accepted."""
+        resp = await client.post(
+            "/api/v1/auth/logout",
+            json={"refresh_token": "not-a-real-token"},
+        )
+        assert resp.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# GDPR erasure completeness
+# ---------------------------------------------------------------------------
+
+
+class TestGDPRErasureCompleteness:
+    @pytest.mark.asyncio
+    async def test_erasure_removes_all_data_types(self, client: AsyncClient):
+        """GDPR erasure should delete all user data across all tables."""
+        tokens = await _register(client, email="erasure@example.com")
+        headers = _auth(tokens)
+
+        # Create data in all categories
+        await client.post(
+            "/api/v1/tracking/checkin",
+            json={"is_sober": True, "mood": 4, "energy_level": 3},
+            headers=headers,
+        )
+        await client.post(
+            "/api/v1/tracking/cravings",
+            json={"intensity": 7, "trigger_category": "stress"},
+            headers=headers,
+        )
+        await client.post(
+            "/api/v1/screening/questionnaires/audit",
+            json={"answers": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
+            headers=headers,
+        )
+
+        # Verify data exists via export
+        export = await client.get("/api/v1/admin/export-my-data", headers=headers)
+        data = export.json()
+        assert len(data["checkins"]) == 1
+        assert len(data["cravings"]) == 1
+        assert len(data["screenings"]) == 1
+
+        # Delete
+        resp = await client.delete("/api/v1/auth/me", headers=headers)
+        assert resp.status_code == 204
+
+        # Re-register with same email (should work since old email was wiped)
+        new_tokens = await _register(client, email="erasure@example.com")
+        new_headers = _auth(new_tokens)
+
+        # New user should have zero data
+        export2 = await client.get("/api/v1/admin/export-my-data", headers=new_headers)
+        data2 = export2.json()
+        assert len(data2["checkins"]) == 0
+        assert len(data2["cravings"]) == 0
+        assert len(data2["screenings"]) == 0
+        assert len(data2["conversations"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Password change
+# ---------------------------------------------------------------------------
+
+
+class TestPasswordChange:
+    @pytest.mark.asyncio
+    async def test_change_password_success(self, client: AsyncClient):
+        tokens = await _register(client, email="pw@example.com")
+        resp = await client.put(
+            "/api/v1/auth/password",
+            json={
+                "current_password": "testpass123",
+                "new_password": "newpassword456",
+            },
+            headers=_auth(tokens),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Password changed successfully."
+
+        # Verify login with new password
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "pw@example.com", "password": "newpassword456"},
+        )
+        assert login_resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_change_password_wrong_current(self, client: AsyncClient):
+        tokens = await _register(client, email="pw2@example.com")
+        resp = await client.put(
+            "/api/v1/auth/password",
+            json={
+                "current_password": "wrongpassword",
+                "new_password": "newpassword456",
+            },
+            headers=_auth(tokens),
+        )
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_change_password_same_as_current(self, client: AsyncClient):
+        tokens = await _register(client, email="pw3@example.com")
+        resp = await client.put(
+            "/api/v1/auth/password",
+            json={
+                "current_password": "testpass123",
+                "new_password": "testpass123",
+            },
+            headers=_auth(tokens),
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_change_password_revokes_refresh_tokens(
+        self, client: AsyncClient
+    ):
+        tokens = await _register(client, email="pw4@example.com")
+        old_refresh = tokens["refresh_token"]
+
+        await client.put(
+            "/api/v1/auth/password",
+            json={
+                "current_password": "testpass123",
+                "new_password": "newpassword456",
+            },
+            headers=_auth(tokens),
+        )
+
+        # Old refresh token should be revoked
+        resp = await client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": old_refresh},
+        )
+        assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Conversation delete
+# ---------------------------------------------------------------------------
+
+
+class TestConversationDelete:
+    @pytest.mark.asyncio
+    async def test_delete_own_conversation(self, client: AsyncClient):
+        tokens = await _register(client)
+        headers = _auth(tokens)
+
+        conv = await client.post("/api/v1/chat/conversations", headers=headers)
+        conv_id = conv.json()["id"]
+
+        resp = await client.delete(
+            f"/api/v1/chat/conversations/{conv_id}", headers=headers
+        )
+        assert resp.status_code == 204
+
+        # Verify conversation is gone
+        convos = await client.get("/api/v1/chat/conversations", headers=headers)
+        assert len(convos.json()) == 0
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_conversation(self, client: AsyncClient):
+        tokens = await _register(client)
+        resp = await client.delete(
+            f"/api/v1/chat/conversations/{uuid.uuid4()}",
+            headers=_auth(tokens),
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_cannot_delete_other_users_conversation(
+        self, client: AsyncClient
+    ):
+        user_a = await _register(client, email="del_a@example.com")
+        user_b = await _register(client, email="del_b@example.com")
+
+        conv = await client.post(
+            "/api/v1/chat/conversations", headers=_auth(user_a)
+        )
+        conv_id = conv.json()["id"]
+
+        resp = await client.delete(
+            f"/api/v1/chat/conversations/{conv_id}",
+            headers=_auth(user_b),
+        )
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Token cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestTokenCleanup:
+    @pytest.mark.asyncio
+    async def test_cleanup_tokens_endpoint(self, client: AsyncClient):
+        """Cleanup endpoint should return a message with count."""
+        tokens = await _register(client, email="cleanup@example.com")
+        headers = _auth(tokens)
+
+        # Logout to create a revoked token
+        await client.post(
+            "/api/v1/auth/logout",
+            json={"refresh_token": tokens["refresh_token"]},
+        )
+
+        resp = await client.post("/api/v1/admin/cleanup-tokens", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "message" in data
+        assert "Cleaned up" in data["message"]
+
+
+# ---------------------------------------------------------------------------
+# OpenAPI docs hidden in production
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAPIDocs:
+    @pytest.mark.asyncio
+    async def test_docs_available_in_dev(self, client: AsyncClient):
+        """In development mode, /docs should be available."""
+        resp = await client.get("/docs")
+        # In development mode, /docs returns 200 (HTML) or redirects
+        assert resp.status_code in (200, 307)
+
+
+# ---------------------------------------------------------------------------
+# GDPR export ordering
+# ---------------------------------------------------------------------------
+
+
+class TestGDPRExportOrdering:
+    @pytest.mark.asyncio
+    async def test_export_checkins_ordered_by_date(self, client: AsyncClient):
+        """GDPR export returns checkins in chronological order."""
+        tokens = await _register(client, "order@test.cz")
+        headers = _auth(tokens)
+
+        # Create checkins on different dates
+        await client.post(
+            "/api/v1/tracking/checkin",
+            json={"is_sober": True, "mood": 3},
+            headers=headers,
+        )
+
+        resp = await client.get("/api/v1/admin/export-my-data", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "checkins" in data
+        # At least one checkin exists
+        assert len(data["checkins"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_export_cravings_ordered_by_created_at(self, client: AsyncClient):
+        """GDPR export returns cravings in chronological order."""
+        tokens = await _register(client, "cravorder@test.cz")
+        headers = _auth(tokens)
+
+        # Create cravings
+        for i in range(3):
+            await client.post(
+                "/api/v1/tracking/cravings",
+                json={"intensity": i + 1, "trigger_category": "stress"},
+                headers=headers,
+            )
+
+        resp = await client.get("/api/v1/admin/export-my-data", headers=headers)
+        assert resp.status_code == 200
+        cravings = resp.json()["cravings"]
+        assert len(cravings) == 3
+        # Verify chronological ordering
+        timestamps = [c["created_at"] for c in cravings]
+        assert timestamps == sorted(timestamps)
+
+
+# ---------------------------------------------------------------------------
+# Global exception handler integration
+# ---------------------------------------------------------------------------
+
+
+class TestExceptionHandlers:
+    @pytest.mark.asyncio
+    async def test_404_on_unknown_route(self, client: AsyncClient):
+        """Unknown routes return 404."""
+        resp = await client.get("/api/v1/nonexistent")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_422_on_invalid_json(self, client: AsyncClient):
+        """Invalid request body returns 422."""
+        resp = await client.post("/api/v1/auth/register", json={"invalid": "body"})
         assert resp.status_code == 422

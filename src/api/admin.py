@@ -1,14 +1,15 @@
-"""Admin/GDPR endpoints — data export."""
+"""Admin/GDPR endpoints — data export and maintenance."""
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas.admin import GDPRExportResponse
+from src.api.schemas.auth import MessageResponse
 from src.core.database import get_db
 from src.core.deps import get_current_user
 from src.core.rate_limit import limiter
-from src.core.security import decrypt_field
+from src.core.security import cleanup_expired_tokens, decrypt_field
 from src.models.conversation import Conversation, Message
 from src.models.screening import ScreeningResult
 from src.models.tracking import CravingEvent, SobrietyCheckin
@@ -17,7 +18,13 @@ from src.models.user import User
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 
-@router.get("/export-my-data", response_model=GDPRExportResponse)
+@router.get(
+    "/export-my-data",
+    response_model=GDPRExportResponse,
+    summary="Export user data (GDPR Art. 15)",
+    description="Right of access. Export all user data as JSON: "
+    "profile, check-ins, cravings, screenings, conversations (decrypted).",
+)
 @limiter.limit("5/minute")
 async def export_my_data(
     request: Request,
@@ -27,14 +34,16 @@ async def export_my_data(
     """GDPR Article 15 — right of access. Export all user data as JSON."""
     # Checkins
     checkins_result = await db.execute(
-        select(SobrietyCheckin).where(SobrietyCheckin.user_id == user.id)
+        select(SobrietyCheckin)
+        .where(SobrietyCheckin.user_id == user.id)
+        .order_by(SobrietyCheckin.date)
     )
     checkins = []
     for c in checkins_result.scalars().all():
         notes = None
         if c.notes_encrypted:
             try:
-                notes = decrypt_field(c.notes_encrypted)
+                notes = decrypt_field(c.notes_encrypted, "sobriety_checkins.notes_encrypted")
             except Exception:
                 notes = "[decryption_error]"
         checkins.append({
@@ -47,14 +56,19 @@ async def export_my_data(
 
     # Cravings
     cravings_result = await db.execute(
-        select(CravingEvent).where(CravingEvent.user_id == user.id)
+        select(CravingEvent)
+        .where(CravingEvent.user_id == user.id)
+        .order_by(CravingEvent.created_at)
     )
     cravings = []
     for c in cravings_result.scalars().all():
         trigger_notes = None
         if c.trigger_notes_encrypted:
             try:
-                trigger_notes = decrypt_field(c.trigger_notes_encrypted)
+                trigger_notes = decrypt_field(
+                    c.trigger_notes_encrypted,
+                    "craving_events.trigger_notes_encrypted",
+                )
             except Exception:
                 trigger_notes = "[decryption_error]"
         cravings.append({
@@ -94,7 +108,7 @@ async def export_my_data(
         messages = []
         for m in msgs_result.scalars().all():
             try:
-                content = decrypt_field(m.content_encrypted)
+                content = decrypt_field(m.content_encrypted, "messages.content_encrypted")
             except Exception:
                 content = "[decryption_error]"
             messages.append(
@@ -119,3 +133,21 @@ async def export_my_data(
         "screenings": screenings,
         "conversations": conversations,
     }
+
+
+@router.post(
+    "/cleanup-tokens",
+    response_model=MessageResponse,
+    summary="Cleanup expired tokens",
+    description="Remove expired and revoked refresh tokens from the database.",
+)
+@limiter.limit("1/minute")
+async def cleanup_tokens(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove expired and revoked refresh tokens from the database."""
+    deleted = await cleanup_expired_tokens(db)
+    await db.commit()
+    return MessageResponse(message=f"Cleaned up {deleted} expired/revoked tokens.")

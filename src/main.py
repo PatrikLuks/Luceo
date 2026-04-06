@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 # Import all routers
@@ -30,11 +31,16 @@ async def lifespan(app: FastAPI):
     logger.info("Luceo API shutting down")
 
 
+APP_VERSION = "0.2.0"
+
+
 app = FastAPI(
     title="Luceo API",
-    version="0.1.0",
+    version=APP_VERSION,
     description="AI-powered addiction recovery support platform",
     lifespan=lifespan,
+    docs_url="/docs" if settings.app_env == "development" else None,
+    redoc_url="/redoc" if settings.app_env == "development" else None,
 )
 
 _cors_origins = (
@@ -93,6 +99,19 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-@app.get("/health")
+@app.get("/health", summary="Health check")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    """Health check with optional DB connectivity probe."""
+    db_ok = False
+    try:
+        from src.core.database import async_session_maker
+        async with async_session_maker() as session:
+            await session.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "version": APP_VERSION,
+        "database": "connected" if db_ok else "unavailable",
+    }
